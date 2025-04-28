@@ -1,5 +1,5 @@
-import { decode } from "../lib.ts";
-import { ServerMessage } from "../proto/network.ts";
+import { decode, encode } from "../lib.ts";
+import { ClientMessage, MoveType, ServerMessage } from "../proto/network.ts";
 
 // TODO: investigate /api that gets polled by the web UI
 
@@ -10,12 +10,23 @@ url.searchParams.append("colorPref", "black");
 
 const ws = new WebSocket(url);
 
+function send(message: ClientMessage) {
+  if (ws.readyState !== WebSocket.OPEN) return;
+  ws.send(encode(message, ClientMessage));
+}
+
 function handle(message: ServerMessage) {
   const payload = message.payload!; // why is this nullable
 
   switch (payload.$case) {
     case "initialState": {
       console.log(payload.value);
+
+      break;
+    }
+
+    case "pong": {
+      // do nothing
       break;
     }
 
@@ -25,12 +36,22 @@ function handle(message: ServerMessage) {
   }
 }
 
+const ping = setInterval(() => {
+  send({
+    payload: {
+      $case: "ping",
+      value: {}
+    }
+  });
+}, 1000 * 10);
+
 ws.addEventListener("open", () => {
   console.log("Opened!");
 });
 
 ws.addEventListener("close", () => {
   console.log("Closed :(");
+  clearInterval(ping);
 });
 
 ws.addEventListener("error", (err) => {
