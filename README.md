@@ -4,7 +4,11 @@ insert witty description here
 
 ## usage/contributing
 
-TypeScript and Deno. please format with [dprint](https://dprint.dev/). a proxy for inspecting network traffic is available (`deno run proxy` then add the `userscripts/proxy.user.js`).
+TypeScript and [Deno](https://deno.com/). clone this repository and install dependencies (`deno install`).
+
+for the bot, run `deno run bot`. for the proxy, run `deno run proxy` and add `userscripts/proxy.user.js` to your favorite userscript manager in the browser.
+
+when contributing, please format with [dprint](https://dprint.dev/) (but I don't really care if you don't).
 
 ## protocol notes
 
