@@ -23,7 +23,14 @@ when scrolling around, the client sends `ClientSubscribe` to update the viewport
 
 ### moving
 
-send a `ClientMove` with a random `moveToken`. the server will reply with a `ServerValidMove` or `ServerInvalidMove` with the corresponding move token, depending on if the move went through. moves must be valid in chess rules (which I don't know shit about chess rules so glhf)
+send a `ClientMove` with a random `moveToken`. the server will reply with a `ServerValidMove` or `ServerInvalidMove` with the corresponding move token, depending on if the move went through.
+
+notes:
+
+- **you can move pieces in areas you aren't subscribed to**, which is exciting for botting purposes
+- **the current position of the piece must be accurate**
+- move token can be anything but it helps associate the result of moves, kinda like a seq in some networking
+- moves must be valid in chess rules (which I don't know shit about chess rules so glhf)
 
 ### snapshot and updates
 
