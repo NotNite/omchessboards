@@ -1,0 +1,67 @@
+{
+  "version": "4",
+  "specifiers": {
+    "npm:@bokuweb/zstd-wasm@^0.0.27": "0.0.27",
+    "npm:@bufbuild/protobuf@^2.2.5": "2.2.5",
+    "npm:ts-proto@^2.7.0": "2.7.0"
+  },
+  "npm": {
+    "@bokuweb/zstd-wasm@0.0.27": {
+      "integrity": "sha512-GDm2uOTK3ESjnYmSeLQifJnBsRCWajKLvN32D2ZcQaaCIJI/Hse9s74f7APXjHit95S10UImsRGkTsbwHmrtmg=="
+    },
+    "@bufbuild/protobuf@2.2.5": {
+      "integrity": "sha512-/g5EzJifw5GF8aren8wZ/G5oMuPoGeS6MQD3ca8ddcvdXR5UELUfdTZITCGNhNXynY/AYl3Z4plmxdj/tRl/hQ=="
+    },
+    "case-anything@2.1.13": {
+      "integrity": "sha512-zlOQ80VrQ2Ue+ymH5OuM/DlDq64mEm+B9UTdHULv5osUMD6HalNTblf2b1u/m6QecjsnOkBpqVZ+XPwIVsy7Ng=="
+    },
+    "detect-libc@1.0.3": {
+      "integrity": "sha512-pGjwhsmsp4kL2RTz08wcOlGN83otlqHeD/Z5T8GXZB+/YcpQ/dgo+lbU8ZsGxV0HIvqqxo9l7mqYwyYMD9bKDg=="
+    },
+    "dprint-node@1.0.8": {
+      "integrity": "sha512-iVKnUtYfGrYcW1ZAlfR/F59cUVL8QIhWoBJoSjkkdua/dkWIgjZfiLMeTjiB06X0ZLkQ0M2C1VbUj/CxkIf1zg==",
+      "dependencies": [
+        "detect-libc"
+      ]
+    },
+    "ts-poet@6.11.0": {
+      "integrity": "sha512-r5AGF8vvb+GjBsnqiTqbLhN1/U2FJt6BI+k0dfCrkKzWvUhNlwMmq9nDHuucHs45LomgHjZPvYj96dD3JawjJA==",
+      "dependencies": [
+        "dprint-node"
+      ]
+    },
+    "ts-proto-descriptors@2.0.0": {
+      "integrity": "sha512-wHcTH3xIv11jxgkX5OyCSFfw27agpInAd6yh89hKG6zqIXnjW9SYqSER2CVQxdPj4czeOhGagNvZBEbJPy7qkw==",
+      "dependencies": [
+        "@bufbuild/protobuf"
+      ]
+    },
+    "ts-proto@2.7.0": {
+      "integrity": "sha512-BGHjse2wTOeswOqnnPKinpxmbaRd882so/e1En6ww59YMG7AO9Kg4vPpJcbVfrpBixPRDqHafXD/RDyd2T99GA==",
+      "dependencies": [
+        "@bufbuild/protobuf",
+        "case-anything",
+        "ts-poet",
+        "ts-proto-descriptors"
+      ]
+    }
+  },
+  "redirects": {
+    "https://deno.land/std/encoding/base64.ts": "https://deno.land/std@0.224.0/encoding/base64.ts",
+    "https://deno.land/x/zstd_wasm/deno/zstd.ts": "https://deno.land/x/zstd_wasm@0.0.21/deno/zstd.ts"
+  },
+  "remote": {
+    "https://deno.land/std@0.224.0/encoding/_util.ts": "beacef316c1255da9bc8e95afb1fa56ed69baef919c88dc06ae6cb7a6103d376",
+    "https://deno.land/std@0.224.0/encoding/base64.ts": "dd59695391584c8ffc5a296ba82bcdba6dd8a84d41a6a539fbee8e5075286eaf",
+    "https://deno.land/x/zstd_wasm@0.0.21/deno/zstd.deno.js": "189187a43a4bdc8d695ff2f6525c8d3461cbd715333123e502a6a3bd84c272b4",
+    "https://deno.land/x/zstd_wasm@0.0.21/deno/zstd.encoded.wasm.ts": "87e04064657bf5082b47a709931f8eb3f0d2fe537a8c650cfb5c997b7b460d07",
+    "https://deno.land/x/zstd_wasm@0.0.21/deno/zstd.ts": "ba3889ee2b11f73ae7c6192da2851ec5f037b5ae7e3afa4c9129f33e856616ec"
+  },
+  "workspace": {
+    "dependencies": [
+      "npm:@bokuweb/zstd-wasm@^0.0.27",
+      "npm:@bufbuild/protobuf@^2.2.5",
+      "npm:ts-proto@^2.7.0"
+    ]
+  }
+}

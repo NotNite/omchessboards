@@ -1,0 +1,11 @@
+{
+  "nodeModulesDir": "manual",
+  "tasks": {
+    "proxy": "deno run -A --watch src/bin/proxy.ts"
+  },
+  "imports": {
+    "@bokuweb/zstd-wasm": "npm:@bokuweb/zstd-wasm@^0.0.27",
+    "@bufbuild/protobuf": "npm:@bufbuild/protobuf@^2.2.5",
+    "ts-proto": "npm:ts-proto@^2.7.0"
+  }
+}
