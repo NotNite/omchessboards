@@ -8,8 +8,8 @@ TypeScript and Deno. please format with [dprint](https://dprint.dev/). a proxy f
 
 ## protocol notes
 
-- WebSocket for live updates/commands + some HTTP JSON APIs that are polled for status
-- protobuf 3, messages are dumped in `network.proto`
+- WebSocket for live updates/commands + some HTTP JSON APIs that are polled for status (TODO: investigate HTTP APIs)
+- WebSocket is Protobuf v3, messages are dumped in `network.proto`
 - some messages are zstd-compressed (detected by the first four bytes matching zstd magic)
 - map is 8000x8000 spaces (1000x1000 boards with 8 spaces per board)
 
@@ -23,7 +23,7 @@ when scrolling around, the client sends `ClientSubscribe` to update the viewport
 
 ### moving
 
-send a `ClientMove` with a random `moveToken`. the server will reply with a `ServerValidMove` or `ServerInvalidMove` depending on if the move went through. moves must be valid in chess rules (which I don't know shit about chess rules so glhf)
+send a `ClientMove` with a random `moveToken`. the server will reply with a `ServerValidMove` or `ServerInvalidMove` with the corresponding move token, depending on if the move went through. moves must be valid in chess rules (which I don't know shit about chess rules so glhf)
 
 ### snapshot and updates
 
