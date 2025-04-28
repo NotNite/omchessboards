@@ -1270,10 +1270,10 @@ function createBasePieceDataForSnapshot(): PieceDataForSnapshot {
 export const PieceDataForSnapshot: MessageFns<PieceDataForSnapshot> = {
   encode(message: PieceDataForSnapshot, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.dx !== 0) {
-      writer.uint32(8).uint32(message.dx);
+      writer.uint32(8).int32(message.dx);
     }
     if (message.dy !== 0) {
-      writer.uint32(16).uint32(message.dy);
+      writer.uint32(16).int32(message.dy);
     }
     if (message.piece !== undefined) {
       PieceDataShared.encode(message.piece, writer.uint32(26).fork()).join();
@@ -1293,7 +1293,7 @@ export const PieceDataForSnapshot: MessageFns<PieceDataForSnapshot> = {
             break;
           }
 
-          message.dx = reader.uint32();
+          message.dx = reader.int32();
           continue;
         }
         case 2: {
@@ -1301,7 +1301,7 @@ export const PieceDataForSnapshot: MessageFns<PieceDataForSnapshot> = {
             break;
           }
 
-          message.dy = reader.uint32();
+          message.dy = reader.int32();
           continue;
         }
         case 3: {
