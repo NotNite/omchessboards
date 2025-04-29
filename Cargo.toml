@@ -1,0 +1,29 @@
+[package]
+name = "scraper"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.98"
+async-socks5 = "0.6.0"
+rand = "0.9.1"
+tokio = { version = "1.44.2", features = ["full"] }
+tokio-rustls = "0.26.2"
+tokio-websockets = { version = "0.11.4", features = ["client", "rand", "ring"] }
+webpki-roots = "0.26.9"
+url = "2.5.4"
+futures = "0.3.31"
+protobuf = "3"
+bytes = { version = "1.10.1", features = [] }
+zstd = "0.13.3"
+tracing = "0.1.41"
+tracing-subscriber = "0.3.19"
+log = "0.4.27"
+async-channel = "2.3.1"
+parking_lot = "0.12.3"
+
+[build-dependencies]
+protobuf-codegen = "3"
+
+[profile.release]
+debug = true
