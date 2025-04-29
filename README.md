@@ -16,11 +16,11 @@ for the bot, run `deno run bot`. for the proxy, run `deno run proxy` and add `us
 
 ## firehorse
 
-C# relay server for the board. scrapes the board and outputs raw snapshots, no other processing/storage is done. connects a shit ton of clients (using a provided HTTP proxy).
+C# relay server for the board. scrapes the board and outputs raw snapshots, no other processing/storage is done. connects a shit ton of clients (using a provided HTTP proxy). Protobuf and Cap'n Proto need to be installed on your system for the schema codegen to work properly.
 
-outputs over TCP (compressed with zstd). format is Cap’n Proto, see `firehorse/firehorse.capnp` for the schema.
+outputs over TCP, formatted with Cap’n Proto (see `firehorse/firehorse.capnp` for the schema). server sends zstd-compressed `Snapshot` to the client, client sends raw `Command` to the server. note that **only the server to client stream is compressed**.
 
-Protobuf and Cap'n Proto need to be installed on your system for the schema codegen to work properly.
+all positions are chunked and split evenly across connections (at startup, there's no work pooling or anything). connections sweep across those positions in order forever.
 
 configure via environment variables:
 

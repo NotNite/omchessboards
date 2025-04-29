@@ -7,6 +7,7 @@ using Google.Protobuf;
 
 namespace Firehorse;
 
+/// <summary>Connection to the OMCB WebSocket.</summary>
 public class ChessConnection : IDisposable {
     private static readonly byte[] ZstdMagic = [
         40,
@@ -14,6 +15,8 @@ public class ChessConnection : IDisposable {
         47,
         253
     ];
+
+    public bool Connected => this.ws.State is WebSocketState.Open;
 
     private readonly ClientWebSocket ws;
     private readonly Decompressor zstd;
@@ -29,7 +32,7 @@ public class ChessConnection : IDisposable {
     }
 
     public async Task ConnectAsync(
-        int x = 0, int y = 0, bool isWhite = false,
+        uint x = 0, uint y = 0, bool isWhite = false,
         CancellationToken cancellationToken = default
     ) {
         var uri = new UriBuilder("wss://onemillionchessboards.com/ws");
@@ -46,13 +49,13 @@ public class ChessConnection : IDisposable {
     }
 
     public async Task RunAsync(
-        Func<ServerMessage, Task> handler,
+        Action<ServerMessage> handler,
         CancellationToken cancellationToken = default
     ) {
         var bytes = new byte[65536].AsMemory();
         var zstdBytes = new byte[1024 * 1024].AsMemory();
 
-        while (this.ws.State is WebSocketState.Open && !cancellationToken.IsCancellationRequested) {
+        while (this.Connected && !cancellationToken.IsCancellationRequested) {
             var result = await this.ws.ReceiveAsync(bytes, cancellationToken);
             if (result.MessageType is WebSocketMessageType.Close) break;
             if (!result.EndOfMessage) throw new Exception("help message too big " + result.Count);
@@ -60,6 +63,7 @@ public class ChessConnection : IDisposable {
             var span = bytes[..result.Count].Span;
             var isZstd = result.Count > 4 && span[..4].SequenceEqual(ZstdMagic);
 
+            // this allocs a shit ton by the way
             ServerMessage message;
             if (isZstd) {
                 var len = this.zstd.Unwrap(span, zstdBytes.Span);
@@ -68,15 +72,17 @@ public class ChessConnection : IDisposable {
                 message = ServerMessage.Parser.ParseFrom(span);
             }
 
-            // FIXME better error handling lol
             try {
-                await handler(message);
-            } catch {
-                // Console.WriteLine(e);
+                handler(message);
+            } catch (Exception e) {
+                Console.WriteLine(e);
             }
         }
+    }
 
-        await this.ws.CloseAsync(WebSocketCloseStatus.NormalClosure, null, cancellationToken);
+    public async Task DisconnectAsync(CancellationToken cancellationToken = default) {
+        this.timer.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+        if (this.Connected) await this.ws.CloseAsync(WebSocketCloseStatus.NormalClosure, null, cancellationToken);
     }
 
     public async Task SendMessageAsync(ClientMessage message, CancellationToken cancellationToken = default) {

@@ -1,4 +1,7 @@
-﻿using System.Net;
+﻿using System.Collections.Concurrent;
+using System.Net;
+using System.Threading.Channels;
+using CapnpGen;
 
 namespace Firehorse;
 
@@ -24,19 +27,8 @@ public static class Program {
         var numConnections = int.Parse(Environment.GetEnvironmentVariable("FIREHORSE_NUM_CONNECTIONS") ?? "1");
         Console.WriteLine($"Listening on {host} with {numConnections} connections");
 
-        using var dispatcher = new Dispatcher(host);
-
-        var positions = new List<(int, int)>();
-        const int end = MapSize - HalfSubscriptionSize;
-        for (var y = HalfSubscriptionSize; y < end; y += SubscriptionSize) {
-            for (var x = HalfSubscriptionSize; x < end; x += SubscriptionSize) {
-                positions.Add((x, y));
-            }
-        }
-
-        var chunkCount = (int) Math.Ceiling(positions.Count / (double) numConnections);
-        var chunks = positions.Chunk(chunkCount).ToList();
-        Console.WriteLine($"{positions.Count} positions, {chunks.Count} chunks (~{chunks[0].Length} per chunk)");
+        var commandChannel = Channel.CreateUnbounded<Command.READER>();
+        using var dispatcher = new Dispatcher(host, commandChannel);
 
         IWebProxy? proxy = null;
         if (Environment.GetEnvironmentVariable("FIREHORSE_PROXY_URL") is { } url) {
@@ -60,24 +52,22 @@ public static class Program {
 
 #if DEBUG
         Console.WriteLine("Starting in three seconds...");
-        await Task.Delay(1000, cts.Token);
+        await Task.Delay(3000, cts.Token);
 #endif
 
         Console.WriteLine("Creating scrapers...");
+        var queue = new PositionQueue();
         for (var i = 0; i < numConnections; i++) {
-            var chunk = chunks[i];
-            if (chunk.Length == 0) throw new Exception($"No data in chunk {i}");
-
-            // Console.WriteLine($"Creating scraper {i}");
-            var scraper = new Scraper(proxy, i, chunk);
-
             tasks.Add(Task.Run(async () => {
-                try {
-                    await scraper.ConnectAsync(cts.Token);
-                    await scraper.RunAsync(dispatcher.Dispatch, cts.Token);
-                } catch (Exception e) {
-                    // poor man's error handling, FIXME reconnect scraper
-                    Console.WriteLine(e);
+                while (!cts.Token.IsCancellationRequested) {
+                    try {
+                        using var scraper = new Scraper(proxy, queue, dispatcher.Dispatch, commandChannel.Reader);
+                        await scraper.ConnectAsync(cts.Token);
+                        await scraper.RunAsync(cts.Token);
+                        await scraper.DisconnectAsync(cts.Token);
+                    } catch (Exception e) {
+                        Console.WriteLine(e);
+                    }
                 }
             }, cts.Token));
         }

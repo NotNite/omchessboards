@@ -1,60 +1,83 @@
-﻿using System.Buffers;
-using System.Net;
+﻿using System.Net;
 using System.Net.Sockets;
 using System.Threading.Channels;
+using Capnp;
+using CapnpGen;
 using ZstdSharp;
+using Exception = System.Exception;
 
 namespace Firehorse;
 
-public class Dispatcher(IPEndPoint endpoint) : IDisposable {
+// ReSharper disable AccessToDisposedClosure
+/// <summary>Broadcasts snapshots to all connected clients, as well as forwarding commands to scrapers.</summary>
+public class Dispatcher(IPEndPoint endpoint, ChannelWriter<Command.READER> sender) : IDisposable {
     private readonly TcpListener listener = new(endpoint);
-    private readonly List<ChannelWriter<ReadOnlyMemory<byte>>> channels = [];
+    private readonly List<ChannelWriter<Snapshot>> clients = [];
 
     public async Task RunAsync(CancellationToken cancellationToken = default) {
         this.listener.Start();
 
-        var tasks = new List<Task>();
-
         while (!cancellationToken.IsCancellationRequested) {
             var client = await this.listener.AcceptTcpClientAsync(cancellationToken);
-
-            var task = Task.Run(async () => {
-                var channel = Channel.CreateBounded<ReadOnlyMemory<byte>>(new BoundedChannelOptions(1) {
-                    SingleReader = true,
-                    SingleWriter = true,
-                    FullMode = BoundedChannelFullMode.DropWrite
-                });
-                var reader = channel.Reader;
-                var writer = channel.Writer;
-
-                lock (this.channels) this.channels.Add(writer);
-
-                await using var stream = client.GetStream();
-                await using var zstd = new CompressionStream(stream);
-
-                await foreach (var data in reader.ReadAllAsync(cancellationToken)) {
-                    try {
-                        await zstd.WriteAsync(data, cancellationToken);
-                        //await stream.WriteAsync(data, cancellationToken);
-                    } catch {
-                        // ignored
-                        break;
-                    }
-                }
-
-                lock (this.channels) this.channels.Remove(writer);
-
-                client.Dispose();
-            }, cancellationToken);
-            tasks.Add(task);
+            _ = Task.Run(() => this.HandleClient(client, cancellationToken), cancellationToken);
         }
-
-        await Task.WhenAll(tasks);
     }
 
-    public void Dispatch(ReadOnlyMemory<byte> data) {
+    private async Task HandleClient(TcpClient client, CancellationToken cancellationToken = default) {
+        await using var stream = client.GetStream();
+        await using var zstd = new CompressionStream(stream);
+        using var pump = new FramePump(zstd);
+
+        var channel = Channel.CreateUnbounded<Snapshot>();
+        lock (this.clients) this.clients.Add(channel.Writer);
+
+        var sendTask = Task.Run(async () => {
+            await foreach (var data in channel.Reader.ReadAllAsync(cancellationToken)) {
+                try {
+                    // this library is so bleh :(
+                    var msg = MessageBuilder.Create();
+                    var writer = msg.BuildRoot<Snapshot.WRITER>();
+                    data.serialize(writer);
+                    pump.Send(msg.Frame);
+                } catch {
+                    // ignored, probably closed
+                    break;
+                }
+            }
+        }, cancellationToken);
+
+        var recvTask = Task.Run(() => {
+            while (!cancellationToken.IsCancellationRequested) {
+                try {
+                    var frame = Framing.ReadSegments(stream);
+                    var deserializer = DeserializerState.CreateRoot(frame);
+                    var reader = new Command.READER(deserializer);
+                    sender.TryWrite(reader);
+                } catch {
+                    // ignored, probably closed
+                    break;
+                }
+            }
+        }, cancellationToken);
+
+        try {
+            Task[] tasks = [sendTask, recvTask];
+            await Task.WhenAll(tasks);
+        } catch (Exception e) {
+            // Console.WriteLine(e);
+        }
+
+        lock (this.clients) this.clients.Remove(channel.Writer);
+        client.Dispose();
+    }
+
+    public void Dispatch(Snapshot data) {
         // Lock contention isn't real and can't hurt you (FIXME maybe)
-        lock (this.channels) this.channels.ForEach(channel => channel.TryWrite(data));
+        lock (this.clients) {
+            foreach (var client in this.clients) {
+                client.TryWrite(data);
+            }
+        }
     }
 
     public void Dispose() {
