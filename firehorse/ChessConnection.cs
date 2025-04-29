@@ -7,7 +7,7 @@ using Google.Protobuf;
 
 namespace Firehorse;
 
-public class Connection : IDisposable {
+public class ChessConnection : IDisposable {
     private static readonly byte[] ZstdMagic = [
         40,
         181,
@@ -19,11 +19,7 @@ public class Connection : IDisposable {
     private readonly Decompressor zstd;
     private readonly Timer timer;
 
-    public Connection(string username) {
-        var proxy = new WebProxy("socks5://rose.host.katie.cat:1234") {
-            Credentials = new NetworkCredential(username, "meow")
-        };
-
+    public ChessConnection(IWebProxy? proxy) {
         this.ws = new ClientWebSocket();
         this.ws.Options.Proxy = proxy;
 
@@ -32,8 +28,7 @@ public class Connection : IDisposable {
         this.timer = new Timer(this.OnTimer);
     }
 
-    public async Task RunAsync(
-        Func<ServerMessage, Task> handler,
+    public async Task ConnectAsync(
         int x = 0, int y = 0, bool isWhite = false,
         CancellationToken cancellationToken = default
     ) {
@@ -48,8 +43,15 @@ public class Connection : IDisposable {
 
         await this.ws.ConnectAsync(uri.Uri, cancellationToken);
         this.timer.Change(TimeSpan.Zero, TimeSpan.FromSeconds(10));
+    }
 
+    public async Task RunAsync(
+        Func<ServerMessage, Task> handler,
+        CancellationToken cancellationToken = default
+    ) {
         var bytes = new byte[65536].AsMemory();
+        var zstdBytes = new byte[1024 * 1024].AsMemory();
+
         while (this.ws.State is WebSocketState.Open && !cancellationToken.IsCancellationRequested) {
             var result = await this.ws.ReceiveAsync(bytes, cancellationToken);
             if (result.MessageType is WebSocketMessageType.Close) break;
@@ -58,10 +60,15 @@ public class Connection : IDisposable {
             var span = bytes[..result.Count].Span;
             var isZstd = result.Count > 4 && span[..4].SequenceEqual(ZstdMagic);
 
-            if (isZstd) span = this.zstd.Unwrap(span);
-            var message = ServerMessage.Parser.ParseFrom(span);
+            ServerMessage message;
+            if (isZstd) {
+                var len = this.zstd.Unwrap(span, zstdBytes.Span);
+                message = ServerMessage.Parser.ParseFrom(zstdBytes[..len].Span);
+            } else {
+                message = ServerMessage.Parser.ParseFrom(span);
+            }
 
-            // FIXME this sucks
+            // FIXME better error handling lol
             try {
                 await handler(message);
             } catch {

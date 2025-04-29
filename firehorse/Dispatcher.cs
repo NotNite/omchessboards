@@ -1,54 +1,63 @@
-﻿using System.Collections.Concurrent;
-using System.Net;
+﻿using System.Net;
 using System.Net.Sockets;
+using System.Threading.Channels;
+using ZstdSharp;
 
 namespace Firehorse;
 
 public class Dispatcher(IPEndPoint endpoint) : IDisposable {
     private readonly TcpListener listener = new(endpoint);
-    private readonly List<Connection> clients = [];
+    private readonly List<ChannelWriter<ReadOnlyMemory<byte>>> channels = [];
 
     public async Task RunAsync(CancellationToken cancellationToken = default) {
         this.listener.Start();
 
+        var tasks = new List<Task>();
+
         while (!cancellationToken.IsCancellationRequested) {
             var client = await this.listener.AcceptTcpClientAsync(cancellationToken);
-            this.clients.Add(new Connection(client));
+
+            var task = Task.Run(async () => {
+                var channel = Channel.CreateBounded<ReadOnlyMemory<byte>>(new BoundedChannelOptions(1) {
+                    SingleReader = true,
+                    SingleWriter = true,
+                    FullMode = BoundedChannelFullMode.DropWrite
+                });
+                var reader = channel.Reader;
+                var writer = channel.Writer;
+
+                lock (this.channels) this.channels.Add(writer);
+
+                await using var stream = client.GetStream();
+                await using var zstd = new CompressionStream(stream);
+
+                await foreach (var data in reader.ReadAllAsync(cancellationToken)) {
+                    try {
+                        await zstd.WriteAsync(data, cancellationToken);
+                        //await stream.WriteAsync(data, cancellationToken);
+                    } catch {
+                        // ignored
+                        break;
+                    }
+                }
+
+                lock (this.channels) this.channels.Remove(writer);
+
+                client.Dispose();
+            }, cancellationToken);
+            tasks.Add(task);
         }
+
+        await Task.WhenAll(tasks);
     }
 
-    public async Task DispatchAsync(ReadOnlyMemory<byte> data, CancellationToken cancellationToken = default) {
-        // FIXME this also sucks
-        foreach (var client in this.clients.ToList()) {
-            try {
-                await client.Stream.WriteAsync(data, cancellationToken);
-            } catch {
-                client.Dispose();
-                this.clients.Remove(client);
-            }
-        }
+    public void Dispatch(ReadOnlyMemory<byte> data) {
+        // Lock contention isn't real and can't hurt you (FIXME maybe)
+        lock (this.channels) this.channels.ForEach(channel => channel.TryWrite(data));
     }
 
     public void Dispose() {
-        foreach (var client in this.clients) client.Dispose();
-        this.clients.Clear();
         this.listener.Dispose();
         GC.SuppressFinalize(this);
-    }
-
-    public record Connection : IDisposable {
-        public readonly TcpClient Client;
-        public readonly NetworkStream Stream;
-
-        public Connection(TcpClient client) {
-            this.Client = client;
-            this.Stream = this.Client.GetStream();
-        }
-
-        public void Dispose() {
-            this.Stream.Dispose();
-            this.Client.Dispose();
-            GC.SuppressFinalize(this);
-        }
     }
 }

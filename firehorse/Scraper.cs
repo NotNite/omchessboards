@@ -1,24 +1,30 @@
-﻿using System.Runtime.InteropServices;
+﻿using System.Net;
+using System.Runtime.InteropServices;
 using Chess;
 
 namespace Firehorse;
 
-public class Scraper : IDisposable {
-    private readonly Connection connection;
-    private readonly (int, int)[] chunks;
+public class Scraper(IWebProxy? proxy, int id, (int, int)[] chunks) : IDisposable {
+    private readonly ChessConnection connection = new(proxy);
     private int chunkIdx;
 
-    public Scraper(string username, (int, int)[] chunks) {
-        this.connection = new Connection(username);
-        this.chunks = chunks;
+    // FIXME this format sucks
+    private const int IdCount = Program.SubscriptionSize * Program.SubscriptionSize;
+    private const int DataSize = 2 + 2 + (IdCount * 4);
+    private Memory<byte> data = new byte[DataSize].AsMemory();
+
+    public async Task ConnectAsync(
+        CancellationToken cancellationToken = default
+    ) {
+        var (x, y) = chunks[0];
+        await this.connection.ConnectAsync(x, y, cancellationToken: cancellationToken);
     }
 
     public async Task RunAsync(
-        Func<ReadOnlyMemory<byte>, Task> dispatch,
+        Action<ReadOnlyMemory<byte>> dispatch,
         CancellationToken cancellationToken = default
     ) {
-        var (x, y) = this.chunks[0];
-        await this.connection.RunAsync(Handler, x, y, cancellationToken: cancellationToken);
+        await this.connection.RunAsync(Handler, cancellationToken: cancellationToken);
         return;
 
         async Task Handler(ServerMessage message) {
@@ -48,38 +54,31 @@ public class Scraper : IDisposable {
 
     private async Task HandleSnapshot(
         ServerStateSnapshot snapshot,
-        Func<ReadOnlyMemory<byte>, Task> dispatch,
+        Action<ReadOnlyMemory<byte>> dispatch,
         CancellationToken cancellationToken = default
     ) {
-        // FIXME this format *also* sucks
-        const int idCount = Program.SubscriptionSize * Program.SubscriptionSize;
-        const int idCountBytes = idCount * 4;
-        const int bytesCount = 2 + 2 + idCountBytes;
+        BitConverter.GetBytes((ushort) snapshot.XCoord).CopyTo(this.data);
+        BitConverter.GetBytes((ushort) snapshot.YCoord).CopyTo(this.data[2..]);
+        var ids = MemoryMarshal.Cast<byte, uint>(this.data[4..].Span);
 
-        var ids = new uint[Program.SubscriptionSize * Program.SubscriptionSize];
         foreach (var piece in snapshot.Pieces) {
             var normalizedDx = piece.Dx + Program.HalfSubscriptionSize;
             var normalizedDy = piece.Dy + Program.HalfSubscriptionSize;
-
             var idx = (normalizedDy * Program.SubscriptionSize) + normalizedDx;
             ids[idx] = piece.Piece.Id;
         }
 
-        var bytes = new byte[bytesCount].AsMemory();
-        BitConverter.GetBytes((ushort) snapshot.XCoord).CopyTo(bytes);
-        BitConverter.GetBytes((ushort) snapshot.YCoord).CopyTo(bytes[2..]);
-        MemoryMarshal.Cast<uint, byte>(ids).CopyTo(bytes[4..].Span);
-
-        await dispatch(bytes);
+        dispatch(this.data);
         await this.CycleChunk(cancellationToken);
     }
 
     private async Task CycleChunk(CancellationToken cancellationToken = default) {
         this.chunkIdx++;
-        if (this.chunkIdx > (this.chunks.Length - 1)) this.chunkIdx = 0;
+        if (this.chunkIdx > (chunks.Length - 1)) this.chunkIdx = 0;
+        var (x, y) = chunks[this.chunkIdx];
 
-        var (x, y) = this.chunks[this.chunkIdx];
-        // Console.WriteLine($"going to {x},{y}");
+        // Console.WriteLine($"{id} going to {x},{y}");
+
         await this.connection.SendMessageAsync(new ClientMessage() {
             Subscribe = new ClientSubscribe() {
                 CenterX = (uint) x,
