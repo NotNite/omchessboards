@@ -1,6 +1,11 @@
-﻿using System.Net;
+﻿using System.Buffers;
+using System.Collections.Immutable;
+using System.Net;
 using System.Runtime.InteropServices;
+using Capnp;
+using CapnpGen;
 using Chess;
+using PieceType = CapnpGen.PieceType;
 
 namespace Firehorse;
 
@@ -9,11 +14,6 @@ namespace Firehorse;
 public class Scraper(IWebProxy? proxy, int id, (int, int)[] chunks) : IDisposable {
     private readonly ChessConnection connection = new(proxy);
     private int chunkIdx;
-
-    // FIXME this format sucks
-    private const int IdCount = Program.SubscriptionSize * Program.SubscriptionSize;
-    private const int DataSize = 2 + 2 + (IdCount * 4);
-    private Memory<byte> data = new byte[DataSize].AsMemory();
 
     public async Task ConnectAsync(
         CancellationToken cancellationToken = default
@@ -59,18 +59,32 @@ public class Scraper(IWebProxy? proxy, int id, (int, int)[] chunks) : IDisposabl
         Action<ReadOnlyMemory<byte>> dispatch,
         CancellationToken cancellationToken = default
     ) {
-        BitConverter.GetBytes((ushort) snapshot.XCoord).CopyTo(this.data);
-        BitConverter.GetBytes((ushort) snapshot.YCoord).CopyTo(this.data[2..]);
-        var ids = MemoryMarshal.Cast<byte, uint>(this.data[4..].Span);
+        var msg = MessageBuilder.Create();
+        var writer = msg.BuildRoot<Snapshot.WRITER>();
 
-        foreach (var piece in snapshot.Pieces) {
-            var normalizedDx = piece.Dx + Program.HalfSubscriptionSize;
-            var normalizedDy = piece.Dy + Program.HalfSubscriptionSize;
-            var idx = (normalizedDy * Program.SubscriptionSize) + normalizedDx;
-            ids[idx] = piece.Piece.Id;
-        }
+        var proto = new Snapshot() {
+            X = (ushort)snapshot.XCoord,
+            Y = (ushort) snapshot.YCoord,
+            Pieces = snapshot.Pieces.Select(p => new Piece() {
+                Id = p.Piece.Id,
+                Dx= (sbyte)p.Dx,
+                Dy = (sbyte)p.Dy,
+                Type = (PieceType) p.Piece.Type,
+                IsWhite = p.Piece.IsWhite
+            }).ToImmutableList()
+        };
 
-        dispatch(this.data);
+        proto.serialize(writer);
+
+        // this library is so bleh :(
+        using var ms = new MemoryStream();
+        using var pump = new FramePump(ms);
+        pump.Send(msg.Frame);
+        ms.Seek(0, SeekOrigin.Begin);
+        var bytes = ms.ToArray().AsMemory();
+
+        dispatch(bytes);
+
         await this.CycleChunk(cancellationToken);
     }
 

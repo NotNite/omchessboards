@@ -11,22 +11,20 @@ public static class Program {
     public const int SubscriptionSize = 96;
     public const int HalfSubscriptionSize = SubscriptionSize / 2;
 
-    public const int NumProxies = 3;      // cloudflare limit
-    public const int MaxConnections = 15; // server(?) limit
-    public const int TotalConnections = NumProxies * MaxConnections;
-
     public static async Task Main() {
+        var tasks = new List<Task>();
+
         var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (_, _) => {
             Console.WriteLine("cya");
             cts.Cancel();
         };
 
-        Console.WriteLine($"{NumProxies} proxies, {MaxConnections} connections ({TotalConnections} total)");
+        var host = IPEndPoint.Parse(Environment.GetEnvironmentVariable("FIREHORSE_HOST") ?? "127.0.0.1:42069");
+        var numConnections = int.Parse(Environment.GetEnvironmentVariable("FIREHORSE_NUM_CONNECTIONS") ?? "1");
+        Console.WriteLine($"Listening on {host} with {numConnections} connections");
 
-        var tasks = new List<Task>();
-        using var dispatcher = new Dispatcher(new IPEndPoint(IPAddress.Loopback, 42069));
-        tasks.Add(dispatcher.RunAsync(cts.Token));
+        using var dispatcher = new Dispatcher(host);
 
         var positions = new List<(int, int)>();
         const int end = MapSize - HalfSubscriptionSize;
@@ -36,39 +34,58 @@ public static class Program {
             }
         }
 
-        var chunkCount = (int) Math.Ceiling(positions.Count / (double) TotalConnections);
+        var chunkCount = (int) Math.Ceiling(positions.Count / (double) numConnections);
         var chunks = positions.Chunk(chunkCount).ToList();
-        Console.WriteLine($"{positions.Count} positions, {chunks.Count} chunks, {chunks[0].Length} per chunk");
+        Console.WriteLine($"{positions.Count} positions, {chunks.Count} chunks (~{chunks[0].Length} per chunk)");
 
-        for (var proxyId = 0; proxyId < NumProxies; proxyId++) {
-            // TODO: configure this
-            var username = $"{proxyId:X4}13376969";
-            var proxy = new WebProxy("socks5://rose.host.katie.cat:1234") {
-                Credentials = new NetworkCredential(username, "meow")
+        IWebProxy? proxy = null;
+        if (Environment.GetEnvironmentVariable("FIREHORSE_PROXY_URL") is { } url) {
+            var proxyUsername = Environment.GetEnvironmentVariable("FIREHORSE_PROXY_USERNAME");
+            var proxyPassword = Environment.GetEnvironmentVariable("FIREHORSE_PROXY_PASSWORD");
+
+            var credentials = (proxyUsername is not null || proxyPassword is not null)
+                ? new NetworkCredential(proxyUsername, proxyPassword)
+                : null;
+
+            Console.WriteLine(credentials != null
+                ? $"Using proxy (with auth): {url}"
+                : $"Using proxy (without auth): {url}");
+
+            proxy = new WebProxy(url) {
+                Credentials = credentials
             };
-
-            for (var i = 0; i < MaxConnections; i++) {
-                var chunkIdx = (proxyId * MaxConnections) + i;
-                var chunk = chunks[chunkIdx];
-                if (chunk.Length == 0) throw new Exception($"No data in chunk {chunkIdx}");
-
-                // NOTE: seems to be a hard limit of 45 per IPv6 /48. must also connect sequentially to avoid 429s
-                Console.WriteLine($"Connecting scraper {chunkIdx}");
-                var scraper = new Scraper(proxy, chunkIdx, chunk);
-                await scraper.ConnectAsync(cts.Token);
-
-                tasks.Add(Task.Run(async () => {
-                    try {
-                        await scraper.RunAsync(dispatcher.Dispatch, cts.Token);
-                    } catch (Exception e) {
-                        // poor man's error handling
-                        Console.WriteLine(e);
-                    }
-                }, cts.Token));
-            }
+        } else {
+            Console.WriteLine("Not using proxy (be careful!!!)");
         }
 
-        Console.WriteLine("All scrapers connected, running");
+#if DEBUG
+        Console.WriteLine("Starting in three seconds...");
+        await Task.Delay(1000, cts.Token);
+#endif
+
+        Console.WriteLine("Creating scrapers...");
+        for (var i = 0; i < numConnections; i++) {
+            var chunk = chunks[i];
+            if (chunk.Length == 0) throw new Exception($"No data in chunk {i}");
+
+            // Console.WriteLine($"Creating scraper {i}");
+            var scraper = new Scraper(proxy, i, chunk);
+
+            tasks.Add(Task.Run(async () => {
+                try {
+                    await scraper.ConnectAsync(cts.Token);
+                    await scraper.RunAsync(dispatcher.Dispatch, cts.Token);
+                } catch (Exception e) {
+                    // poor man's error handling, FIXME reconnect scraper
+                    Console.WriteLine(e);
+                }
+            }, cts.Token));
+        }
+
+        Console.WriteLine("Starting dispatcher...");
+        tasks.Add(dispatcher.RunAsync(cts.Token));
+
+        Console.WriteLine("Running, glhf");
         await Task.WhenAll(tasks);
     }
 }
