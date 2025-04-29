@@ -4,6 +4,8 @@ using Chess;
 
 namespace Firehorse;
 
+#pragma warning disable CS9113 // Parameter is unread.
+
 public class Scraper(IWebProxy? proxy, int id, (int, int)[] chunks) : IDisposable {
     private readonly ChessConnection connection = new(proxy);
     private int chunkIdx;
@@ -74,9 +76,12 @@ public class Scraper(IWebProxy? proxy, int id, (int, int)[] chunks) : IDisposabl
 
     private async Task CycleChunk(CancellationToken cancellationToken = default) {
         this.chunkIdx++;
-        if (this.chunkIdx > (chunks.Length - 1)) this.chunkIdx = 0;
-        var (x, y) = chunks[this.chunkIdx];
+        if (this.chunkIdx >= chunks.Length) {
+            // Console.WriteLine($"finished chunk work {id} :D");
+            this.chunkIdx = 0;
+        }
 
+        var (x, y) = chunks[this.chunkIdx];
         // Console.WriteLine($"{id} going to {x},{y}");
 
         await this.connection.SendMessageAsync(new ClientMessage() {

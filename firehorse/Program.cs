@@ -36,8 +36,9 @@ public static class Program {
             }
         }
 
-        var chunks = positions.Chunk(positions.Count / TotalConnections).ToList();
-        Console.WriteLine($"{positions.Count} positions, {chunks.Count} chunks");
+        var chunkCount = (int) Math.Ceiling(positions.Count / (double) TotalConnections);
+        var chunks = positions.Chunk(chunkCount).ToList();
+        Console.WriteLine($"{positions.Count} positions, {chunks.Count} chunks, {chunks[0].Length} per chunk");
 
         for (var proxyId = 0; proxyId < NumProxies; proxyId++) {
             // TODO: configure this
