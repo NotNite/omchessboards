@@ -1,6 +1,7 @@
 syntax = "proto3";
 package chess;
 
+// use one of these to update the codegen (depending on what OS you use):
 // protoc --plugin=./node_modules/.bin/protoc-gen-ts_proto --ts_proto_opt=oneof=unions-value --ts_proto_out=./src/proto ./network.proto
 // protoc --plugin=protoc-gen-ts_proto=".\\node_modules\\.bin\\protoc-gen-ts_proto.cmd" --ts_proto_opt=oneof=unions-value --ts_proto_out=./src/proto ./network.proto
 

@@ -2,13 +2,33 @@
 
 insert witty description here
 
-## usage/contributing
+## contributing rules
 
-TypeScript and [Deno](https://deno.com/). clone this repository and install dependencies (`deno install`).
+please don't push onto other people's branches (and you should probably name your branches to be safe).
+
+when contributing to the TypeScript parts, please format with [dprint](https://dprint.dev/). when contributing to the C# parts, please respect the .editorconfig. I don't really care if you don't though.
+
+## bots & proxies
+
+`src/` contains some stuff written in [Deno](https://deno.com/). clone this repository and install dependencies (`deno install`).
 
 for the bot, run `deno run bot`. for the proxy, run `deno run proxy` and add `userscripts/proxy.user.js` to your favorite userscript manager in the browser.
 
-when contributing, please format with [dprint](https://dprint.dev/) (but I don't really care if you don't).
+## firehorse
+
+C# relay server for the board. scrapes the board and outputs raw snapshots, no other processing/storage is done. connects a shit ton of clients (using a provided HTTP proxy). Protobuf and Cap'n Proto need to be installed on your system for the schema codegen to work properly.
+
+outputs over TCP, formatted with Cap’n Proto (see `firehorse/firehorse.capnp` for the schema). server sends zstd-compressed `Snapshot` to the client, client sends raw `Command` to the server. note that **only the server to client stream is compressed**.
+
+all positions are chunked and split evenly across connections (at startup, there's no work pooling or anything). connections sweep across those positions in order forever.
+
+configure via environment variables:
+
+- `FIREHORSE_PROXY_URL`: optional proxy to connect to (e.g. `socks5://whatever` or `http://whatever`)
+- `FIREHORSE_PROXY_USERNAME`: optional username for the proxy
+- `FIREHORSE_PROXY_PASSWORD`: optional password for the proxy
+- `FIREHORSE_NUM_CONNECTIONS`: number of scrapers to create
+- `FIREHORSE_HOST`: host to listen on (e.g. `127.0.0.1:42069`)
 
 ## protocol notes
 
