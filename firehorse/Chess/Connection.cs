@@ -16,6 +16,7 @@ public class Connection : IDisposable {
     ];
 
     public bool Connected => this.ws.State is WebSocketState.Open;
+    public readonly TaskCompletionSource<bool> IsWhite = new();
 
     private readonly ClientWebSocket ws;
     private readonly Decompressor zstd;
@@ -76,6 +77,10 @@ public class Connection : IDisposable {
     }
 
     private void HandleMessage(ServerMessage message) {
+        if (message.PayloadCase is ServerMessage.PayloadOneofCase.InitialState) {
+            this.IsWhite.SetResult(message.InitialState.PlayingWhite);
+        }
+
         // lock contention isn't real and can't hurt you
         lock (this.eventHandlers) {
             // this is technically O(n) iirc but it saves the .ToList() alloc so w/e
@@ -165,7 +170,7 @@ public class Connection : IDisposable {
                 linked.Token
             );
 
-            if (msg.PayloadCase is ServerMessage.PayloadOneofCase.InvalidMove) throw new Exception("Invalid move");
+            if (msg.PayloadCase is ServerMessage.PayloadOneofCase.InvalidMove) throw new InvalidMoveException(move);
 
             return msg.ValidMove;
         } finally {

@@ -7,41 +7,47 @@ namespace Firehorse.Chess;
 
 public class Scraper(
     Connection connection,
-    ScraperPositionQueue queue,
-    ChannelWriter<Snapshot> writer
+    ConstantScraperQueue<(uint, uint)> positionQueue,
+    AsyncScraperQueue<ClientMove, ServerValidMove> whiteMoveQueue,
+    AsyncScraperQueue<ClientMove, ServerValidMove> blackMoveQueue,
+    ChannelWriter<Snapshot> snapshotWriter
 ) : IDisposable {
-    public async Task RunAsync(CancellationToken cancellationToken = default) {
+    public async Task RunSnapshotsAsync(CancellationToken cancellationToken = default) {
         while (!cancellationToken.IsCancellationRequested) {
-            var (x, y) = queue.GetNextPosition();
+            var (x, y) = positionQueue.Get();
 
             ServerStateSnapshot snapshot;
             try {
                 snapshot = await connection.GetSnapshotAsync(x, y, cancellationToken);
             } catch {
                 // Re-submit work if we failed to get it ourselves
-                queue.SubmitWork((x, y));
+                positionQueue.Submit((x, y));
                 throw;
             }
 
-            // convert to our protocol
-            var pieces = new Piece[snapshot.Pieces.Count];
-            for (var i = 0; i < pieces.Length; i++) {
-                var theirPiece = snapshot.Pieces[i];
-                var ourPiece = new Piece() {
-                    Id = theirPiece.Piece.Id,
-                    Dx = (sbyte) theirPiece.Dx,
-                    Dy = (sbyte) theirPiece.Dy,
-                    Type = (PieceType) theirPiece.Piece.Type,
-                    IsWhite = theirPiece.Piece.IsWhite
-                };
-                pieces[i] = ourPiece;
+            snapshotWriter.TryWrite(Util.ConvertSnapshotToFirehorse(snapshot));
+        }
+    }
+
+    public async Task RunMovesAsync(CancellationToken cancellationToken = default) {
+        var isWhite = await connection.IsWhite.Task.WaitAsync(cancellationToken);
+        var moveQueue = isWhite ? whiteMoveQueue : blackMoveQueue;
+
+        while (!cancellationToken.IsCancellationRequested) {
+            var (data, tcs) = await moveQueue.GetAsync(cancellationToken);
+
+            ServerValidMove result;
+            try {
+                result = await connection.MakeMoveAsync(data, cancellationToken);
+            } catch (InvalidMoveException move) {
+                tcs.SetException(move);
+                continue;
+            } catch {
+                moveQueue.Submit((data, tcs));
+                throw;
             }
 
-            writer.TryWrite(new Snapshot() {
-                X = (ushort) snapshot.XCoord,
-                Y = (ushort) snapshot.YCoord,
-                Pieces = pieces
-            });
+            tcs.SetResult(result);
         }
     }
 

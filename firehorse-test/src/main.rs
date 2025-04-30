@@ -4,8 +4,8 @@ use capnp_rpc::{RpcSystem, pry, rpc_twoparty_capnp::Side, twoparty::VatNetwork};
 use flume::{Receiver, Sender};
 use futures::{
     AsyncReadExt, TryFutureExt,
-    future::try_join3,
     io::{BufReader, BufWriter},
+    try_join,
 };
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::net::TcpStream;
@@ -73,7 +73,7 @@ async fn poll(rx: Receiver<(u16, u16)>) -> eyre::Result<()> {
                     .expect("time went backwards");
 
                 let elapsed = now - start;
-                println!("{}", elapsed.as_secs_f32());
+                println!("Indexed board in {}", elapsed.as_secs_f32());
             }
 
             if size % 100 == 0 {
@@ -115,15 +115,86 @@ async fn main() -> eyre::Result<()> {
     let callback = Callback::new(tx);
     let callback_client = capnp_rpc::new_client(callback);
 
-    let mut request = client.listen_request();
-    request.get().set_callback(callback_client);
+    let mut listen = client.listen_request();
+    listen.get().set_callback(callback_client);
 
-    try_join3(
+    /*let mut move_sequential = client.move_sequential_request();
+    let mut move_sequential_moves = move_sequential.get().init_moves(4);
+    for i in 0..move_sequential_moves.len() {
+        let mut r#move = move_sequential_moves.reborrow().get(i as u32);
+
+        let id = 14634993;
+        let x = 3656;
+        let y = 2745;
+
+        r#move.set_id(id);
+        r#move.set_move_type(firehorse_capnp::MoveType::Normal);
+        r#move.set_piece_is_white(false);
+
+        r#move.set_from_x(x);
+        r#move.set_to_x(x);
+
+        r#move.set_from_y(y + i as u16);
+        r#move.set_to_y(y + i as u16 + 1);
+    }
+
+    let mut move_parallel = client.move_parallel_request();
+    let mut move_parallel_moves = move_parallel.get().init_moves(8);
+    for i in 0..move_parallel_moves.len() {
+        let mut r#move = move_parallel_moves.reborrow().get(i as u32);
+
+        let id = 14602993 + i;
+        let x = 3648 + i as u16;
+        let y = 2745;
+
+        r#move.set_id(id);
+        r#move.set_move_type(firehorse_capnp::MoveType::Normal);
+        r#move.set_piece_is_white(false);
+
+        r#move.set_from_x(x);
+        r#move.set_to_x(x);
+
+        r#move.set_from_y(y);
+        r#move.set_to_y(y + 1);
+    }*/
+
+    try_join!(
         poll(rx),
         system.map_err(|e| e.into()),
-        request.send().promise.map_err(|e| e.into()),
-    )
-    .await?;
+        listen.send().promise.map_err(|e| e.into()),
+        /*move_sequential
+            .send()
+            .promise
+            .map_ok(|d| {
+                if let Ok(d) = d.get() {
+                    if d.get_success() {
+                        println!("move_sequential success!");
+                    } else {
+                        println!("move_sequential failed at {} :(", d.get_failed_at());
+                    }
+                }
+            })
+            .map_err(|e| e.into()),
+        move_parallel
+            .send()
+            .promise
+            .map_ok(|d| {
+                if let Ok(d) = d.get() {
+                    if d.get_success() {
+                        println!("move_parallel success!");
+                    } else {
+                        let failed = if let Ok(failed) = d.get_failed() {
+                            failed.iter().map(|i| i).collect::<Vec<_>>()
+                        } else {
+                            Vec::new()
+                        };
+
+                        println!("move_parallel failed {:?} :(", failed);
+                    }
+                }
+            })
+            .map_err(|e| e.into()),*/
+    )?;
 
     Ok(())
 }

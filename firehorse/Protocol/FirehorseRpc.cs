@@ -8,8 +8,9 @@ namespace Firehorse.Protocol;
 // ReSharper disable AccessToDisposedClosure
 public class FirehorseRpc(
     ChannelRelay<Snapshot> snapshotRelay,
-    ScraperPositionQueue queue,
-    ConnectionManager connectionManager
+    ConstantScraperQueue<(uint, uint)> positionQueue,
+    AsyncScraperQueue<ClientMove, ServerValidMove> whiteMoveQueue,
+    AsyncScraperQueue<ClientMove, ServerValidMove> blackMoveQueue
 ) : IFirehorse {
     public Task Listen(ICallback callback, CancellationToken cancellationToken = default) {
         // Separate task because we want it to outlive this function returning
@@ -36,61 +37,71 @@ public class FirehorseRpc(
         return Task.CompletedTask;
     }
 
-    public async Task<(bool, ushort)> MoveSequential(
+    public async Task<(bool, IReadOnlyList<uint>, ushort)> MoveSequential(
         IReadOnlyList<Move> moves, CancellationToken cancellationToken = default
     ) {
+        var captured = new List<uint>();
+
         for (var i = 0; i < moves.Count; i++) {
             try {
-                var move = moves[i];
-                var conn = connectionManager.GetRandomConnection();
+                using var cts = new CancellationTokenSource();
+                using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, cts.Token);
+                cts.CancelAfter(TimeSpan.FromSeconds(1));
 
-                await conn.MakeMoveAsync(new ClientMove() {
-                    PieceId = move.Id,
-                    FromX = move.FromX,
-                    FromY = move.FromY,
-                    ToX = move.ToX,
-                    ToY = move.ToY,
-                    MoveType = (MoveType) move.MoveType
-                }, cancellationToken);
-            } catch (Exception) {
-                // Console.WriteLine(e);
-                return (false, (ushort) i);
+                var move = moves[i];
+                var gameMove = Util.ConvertMoveToGame(move);
+                var moveQueue = move.PieceIsWhite ? whiteMoveQueue : blackMoveQueue;
+
+                var result = await moveQueue.SubmitAndWait(gameMove).WaitAsync(linked.Token);
+                if (result.CapturedPieceId != 0) captured.Add(result.CapturedPieceId);
+            } catch (Exception e) {
+                // This will throw for InvalidMoveException, but we also want other failures (e.g. unreliable net) to
+                // bail, since we won't know if the move went through or not
+
+                Console.WriteLine(e);
+                return (false, captured, (ushort) i);
             }
         }
 
-        return (true, 0);
+        return (true, captured, 0);
     }
 
-    public async Task<(bool, IReadOnlyList<ushort>)> MoveParallel(
+    public async Task<(bool, IReadOnlyList<uint>, IReadOnlyList<ushort>)> MoveParallel(
         IReadOnlyList<Move> moves, CancellationToken cancellationToken = default
     ) {
-        var attempts = moves.Select((move) => Task.Run(async () => {
-            var conn = connectionManager.GetRandomConnection();
-            await conn.MakeMoveAsync(new ClientMove() {
-                PieceId = move.Id,
-                FromX = move.FromX,
-                FromY = move.FromY,
-                ToX = move.ToX,
-                ToY = move.ToY,
-                MoveType = (MoveType) move.MoveType
-            }, cancellationToken);
-        }, cancellationToken).ContinueWith(t => {
-            if (t.IsCompletedSuccessfully) {
-                return true;
-            } else {
-                // Console.WriteLine(t.Exception);
-                return false;
-            }
-        }, cancellationToken));
+        var attempts = moves.Select((move) => {
+            var task = Task.Run(async () => {
+                using var cts = new CancellationTokenSource();
+                using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, cts.Token);
+                cts.CancelAfter(TimeSpan.FromSeconds(1));
 
+                var gameMove = Util.ConvertMoveToGame(move);
+                var moveQueue = move.PieceIsWhite ? whiteMoveQueue : blackMoveQueue;
+
+                var result = await moveQueue.SubmitAndWait(gameMove).WaitAsync(linked.Token);
+                return result.CapturedPieceId;
+            }, cancellationToken);
+
+            return task.ContinueWith<uint?>(t => {
+                if (t.IsCompletedSuccessfully) {
+                    return t.Result;
+                } else {
+                    Console.WriteLine(t.Exception!.InnerException);
+                    return null;
+                }
+            }, cancellationToken);
+        });
         var result = await Task.WhenAll(attempts);
-        var success = result.All(x => x);
-        var failed = result.Where(x => !x).Select((_, i) => (ushort) i).ToList();
-        return (success, failed);
+
+        var success = result.All(x => x is not null);
+        var captured = result.Where(x => x > 0).Select(x => x!.Value).ToList();
+        var failed = result.Where(x => x is null).Select((_, i) => (ushort) i).ToList();
+
+        return (success, captured, failed);
     }
 
     public Task Queue(ushort x, ushort y, CancellationToken cancellationToken = default) {
-        queue.SubmitWork((x, y));
+        positionQueue.Submit((x, y));
         return Task.CompletedTask;
     }
 

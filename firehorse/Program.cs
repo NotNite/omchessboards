@@ -1,6 +1,7 @@
 ﻿using System.Net;
 using System.Threading.Channels;
 using CapnpGen;
+using Chess;
 using Firehorse.Chess;
 using Firehorse.Protocol;
 
@@ -28,9 +29,10 @@ public static class Program {
         var snapshotChannel = Channel.CreateUnbounded<Snapshot>();
         tasks.Add(Task.Run(() => snapshotRelay.Relay(snapshotChannel, cts.Token), cts.Token));
 
-        var queue = new ScraperPositionQueue();
-        var connectionManager = new ConnectionManager();
-        using var rpc = new FirehorseRpc(snapshotRelay, queue, connectionManager);
+        var positionQueue = new ConstantScraperQueue<(uint, uint)>(CreatePositions());
+        var whiteMoveQueue = new AsyncScraperQueue<ClientMove, ServerValidMove>();
+        var blackMoveQueue = new AsyncScraperQueue<ClientMove, ServerValidMove>();
+        using var rpc = new FirehorseRpc(snapshotRelay, positionQueue, whiteMoveQueue, blackMoveQueue);
 
         var host = IPEndPoint.Parse(Environment.GetEnvironmentVariable("FIREHORSE_HOST") ?? "127.0.0.1:42069");
         using var server = new FirehorseServer(host, rpc);
@@ -68,26 +70,28 @@ public static class Program {
         for (var i = 0; i < numConnections; i++) {
             tasks.Add(Task.Run(async () => {
                 while (!cts.Token.IsCancellationRequested) {
+                    using var connection = new Connection(proxy);
                     try {
-                        using var connection = new Connection(proxy);
-                        connectionManager.AddConnection(connection);
-                        try {
-                            using var scraper = new Scraper(connection, queue, snapshotChannel.Writer);
+                        using var scraper = new Scraper(
+                            connection,
+                            positionQueue,
+                            whiteMoveQueue,
+                            blackMoveQueue,
+                            snapshotChannel.Writer
+                        );
 
-                            // TODO: go back to using initial state in scraper
-                            await connection.ConnectAsync(cancellationToken: cts.Token);
+                        // TODO: go back to using initial state in scraper
+                        await connection.ConnectAsync(cancellationToken: cts.Token);
 
-                            using var scraperCts = new CancellationTokenSource();
-                            using var linked =
-                                CancellationTokenSource.CreateLinkedTokenSource(scraperCts.Token, cts.Token);
-                            await Util.WrapTasks(
-                                scraperCts,
-                                Task.Run(() => connection.RunAsync(linked.Token), linked.Token),
-                                Task.Run(() => scraper.RunAsync(linked.Token), linked.Token)
-                            );
-                        } finally {
-                            connectionManager.RemoveConnection(connection);
-                        }
+                        using var scraperCts = new CancellationTokenSource();
+                        using var linked =
+                            CancellationTokenSource.CreateLinkedTokenSource(scraperCts.Token, cts.Token);
+                        await Util.WrapTasks(
+                            scraperCts,
+                            Task.Run(() => connection.RunAsync(linked.Token), linked.Token),
+                            Task.Run(() => scraper.RunSnapshotsAsync(linked.Token), linked.Token),
+                            Task.Run(() => scraper.RunMovesAsync(linked.Token), linked.Token)
+                        );
                     } catch (Exception) {
                         // Console.WriteLine(e);
                     }
@@ -100,5 +104,21 @@ public static class Program {
 
         Console.WriteLine("Running, glhf");
         await Util.WrapTasks(cts, tasks);
+    }
+
+    private static List<(uint, uint)> CreatePositions() {
+        const int end = MapSize - HalfSubscriptionSize;
+        const int duplicate = 3; // add the work a few times to prevent constant refills
+
+        var positionList = new List<(uint, uint)>();
+        for (var i = 0; i < duplicate; i++) {
+            for (var y = HalfSubscriptionSize; y < end; y += SubscriptionSize) {
+                for (var x = HalfSubscriptionSize; x < end; x += SubscriptionSize) {
+                    positionList.Add(((uint) x, (uint) y));
+                }
+            }
+        }
+
+        return positionList;
     }
 }

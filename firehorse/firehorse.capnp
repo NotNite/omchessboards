@@ -37,6 +37,7 @@ struct Move {
   toX @3 :UInt16;
   toY @4 :UInt16;
   moveType @5 :MoveType;
+  pieceIsWhite @6 :Bool;
 }
 
 interface Callback {
@@ -49,11 +50,11 @@ interface Firehorse {
 
   # Execute a list of moves one by one.
   # If a move fails, `failedAt` contains the index of the move that failed in the list.
-  moveSequential @1 (moves: List(Move)) -> (success :Bool, failedAt :UInt16);
+  moveSequential @1 (moves: List(Move)) -> (success :Bool, captured :List(UInt32), failedAt :UInt16);
 
   # Execute a list of moves at once, without any guaranteed ordering.
   # If any moves fail, `failed` contains the indexes of the failed moves in the list.
-  moveParallel @2 (moves: List(Move)) -> (success :Bool, failed :List(UInt16));
+  moveParallel @2 (moves: List(Move)) -> (success :Bool, captured :List(UInt32), failed :List(UInt16));
 
   # Queue the given position to be queried for a snapshot.
   queue @3 (x :UInt16, y :UInt16) -> ();

@@ -251,6 +251,7 @@ namespace CapnpGen
             ToX = reader.ToX;
             ToY = reader.ToY;
             MoveType = reader.MoveType;
+            PieceIsWhite = reader.PieceIsWhite;
             applyDefaults();
         }
 
@@ -262,6 +263,7 @@ namespace CapnpGen
             writer.ToX = ToX;
             writer.ToY = ToY;
             writer.MoveType = MoveType;
+            writer.PieceIsWhite = PieceIsWhite;
         }
 
         void ICapnpSerializable.Serialize(SerializerState arg_)
@@ -309,6 +311,12 @@ namespace CapnpGen
             set;
         }
 
+        public bool PieceIsWhite
+        {
+            get;
+            set;
+        }
+
         public struct READER
         {
             readonly DeserializerState ctx;
@@ -326,6 +334,7 @@ namespace CapnpGen
             public ushort ToX => ctx.ReadDataUShort(64UL, (ushort)0);
             public ushort ToY => ctx.ReadDataUShort(80UL, (ushort)0);
             public CapnpGen.MoveType MoveType => (CapnpGen.MoveType)ctx.ReadDataUShort(96UL, (ushort)0);
+            public bool PieceIsWhite => ctx.ReadDataBool(112UL, false);
         }
 
         public class WRITER : SerializerState
@@ -369,6 +378,12 @@ namespace CapnpGen
             {
                 get => (CapnpGen.MoveType)this.ReadDataUShort(96UL, (ushort)0);
                 set => this.WriteData(96UL, (ushort)value, (ushort)0);
+            }
+
+            public bool PieceIsWhite
+            {
+                get => this.ReadDataBool(112UL, false);
+                set => this.WriteData(112UL, value, false);
             }
         }
     }
@@ -529,8 +544,8 @@ namespace CapnpGen
     public interface IFirehorse : IDisposable
     {
         Task Listen(CapnpGen.ICallback callback, CancellationToken cancellationToken_ = default);
-        Task<(bool, ushort)> MoveSequential(IReadOnlyList<CapnpGen.Move> moves, CancellationToken cancellationToken_ = default);
-        Task<(bool, IReadOnlyList<ushort>)> MoveParallel(IReadOnlyList<CapnpGen.Move> moves, CancellationToken cancellationToken_ = default);
+        Task<(bool, IReadOnlyList<uint>, ushort)> MoveSequential(IReadOnlyList<CapnpGen.Move> moves, CancellationToken cancellationToken_ = default);
+        Task<(bool, IReadOnlyList<uint>, IReadOnlyList<ushort>)> MoveParallel(IReadOnlyList<CapnpGen.Move> moves, CancellationToken cancellationToken_ = default);
         Task Queue(ushort x, ushort y, CancellationToken cancellationToken_ = default);
     }
 
@@ -550,7 +565,7 @@ namespace CapnpGen
             }
         }
 
-        public async Task<(bool, ushort)> MoveSequential(IReadOnlyList<CapnpGen.Move> moves, CancellationToken cancellationToken_ = default)
+        public async Task<(bool, IReadOnlyList<uint>, ushort)> MoveSequential(IReadOnlyList<CapnpGen.Move> moves, CancellationToken cancellationToken_ = default)
         {
             var in_ = SerializerState.CreateForRpc<CapnpGen.Firehorse.Params_MoveSequential.WRITER>();
             var arg_ = new CapnpGen.Firehorse.Params_MoveSequential()
@@ -559,11 +574,11 @@ namespace CapnpGen
             using (var d_ = await Call(12853609949317486689UL, 1, in_.Rewrap<DynamicSerializerState>(), false, cancellationToken_).WhenReturned)
             {
                 var r_ = CapnpSerializable.Create<CapnpGen.Firehorse.Result_MoveSequential>(d_);
-                return (r_.Success, r_.FailedAt);
+                return (r_.Success, r_.Captured, r_.FailedAt);
             }
         }
 
-        public async Task<(bool, IReadOnlyList<ushort>)> MoveParallel(IReadOnlyList<CapnpGen.Move> moves, CancellationToken cancellationToken_ = default)
+        public async Task<(bool, IReadOnlyList<uint>, IReadOnlyList<ushort>)> MoveParallel(IReadOnlyList<CapnpGen.Move> moves, CancellationToken cancellationToken_ = default)
         {
             var in_ = SerializerState.CreateForRpc<CapnpGen.Firehorse.Params_MoveParallel.WRITER>();
             var arg_ = new CapnpGen.Firehorse.Params_MoveParallel()
@@ -572,7 +587,7 @@ namespace CapnpGen
             using (var d_ = await Call(12853609949317486689UL, 2, in_.Rewrap<DynamicSerializerState>(), false, cancellationToken_).WhenReturned)
             {
                 var r_ = CapnpSerializable.Create<CapnpGen.Firehorse.Result_MoveParallel>(d_);
-                return (r_.Success, r_.Failed);
+                return (r_.Success, r_.Captured, r_.Failed);
             }
         }
 
@@ -615,10 +630,10 @@ namespace CapnpGen
             using (d_)
             {
                 var in_ = CapnpSerializable.Create<CapnpGen.Firehorse.Params_MoveSequential>(d_);
-                return Impatient.MaybeTailCall(Impl.MoveSequential(in_.Moves, cancellationToken_), (success, failedAt) =>
+                return Impatient.MaybeTailCall(Impl.MoveSequential(in_.Moves, cancellationToken_), (success, captured, failedAt) =>
                 {
                     var s_ = SerializerState.CreateForRpc<CapnpGen.Firehorse.Result_MoveSequential.WRITER>();
-                    var r_ = new CapnpGen.Firehorse.Result_MoveSequential{Success = success, FailedAt = failedAt};
+                    var r_ = new CapnpGen.Firehorse.Result_MoveSequential{Success = success, Captured = captured, FailedAt = failedAt};
                     r_.serialize(s_);
                     return s_;
                 }
@@ -632,10 +647,10 @@ namespace CapnpGen
             using (d_)
             {
                 var in_ = CapnpSerializable.Create<CapnpGen.Firehorse.Params_MoveParallel>(d_);
-                return Impatient.MaybeTailCall(Impl.MoveParallel(in_.Moves, cancellationToken_), (success, failed) =>
+                return Impatient.MaybeTailCall(Impl.MoveParallel(in_.Moves, cancellationToken_), (success, captured, failed) =>
                 {
                     var s_ = SerializerState.CreateForRpc<CapnpGen.Firehorse.Result_MoveParallel.WRITER>();
-                    var r_ = new CapnpGen.Firehorse.Result_MoveParallel{Success = success, Failed = failed};
+                    var r_ = new CapnpGen.Firehorse.Result_MoveParallel{Success = success, Captured = captured, Failed = failed};
                     r_.serialize(s_);
                     return s_;
                 }
@@ -831,6 +846,7 @@ namespace CapnpGen
             {
                 var reader = READER.create(arg_);
                 Success = reader.Success;
+                Captured = reader.Captured;
                 FailedAt = reader.FailedAt;
                 applyDefaults();
             }
@@ -838,6 +854,7 @@ namespace CapnpGen
             public void serialize(WRITER writer)
             {
                 writer.Success = Success;
+                writer.Captured.Init(Captured);
                 writer.FailedAt = FailedAt;
             }
 
@@ -851,6 +868,12 @@ namespace CapnpGen
             }
 
             public bool Success
+            {
+                get;
+                set;
+            }
+
+            public IReadOnlyList<uint> Captured
             {
                 get;
                 set;
@@ -874,6 +897,7 @@ namespace CapnpGen
                 public static implicit operator DeserializerState(READER reader) => reader.ctx;
                 public static implicit operator READER(DeserializerState ctx) => new READER(ctx);
                 public bool Success => ctx.ReadDataBool(0UL, false);
+                public IReadOnlyList<uint> Captured => ctx.ReadList(0).CastUInt();
                 public ushort FailedAt => ctx.ReadDataUShort(16UL, (ushort)0);
             }
 
@@ -881,13 +905,19 @@ namespace CapnpGen
             {
                 public WRITER()
                 {
-                    this.SetStruct(1, 0);
+                    this.SetStruct(1, 1);
                 }
 
                 public bool Success
                 {
                     get => this.ReadDataBool(0UL, false);
                     set => this.WriteData(0UL, value, false);
+                }
+
+                public ListOfPrimitivesSerializer<uint> Captured
+                {
+                    get => BuildPointer<ListOfPrimitivesSerializer<uint>>(0);
+                    set => Link(0, value);
                 }
 
                 public ushort FailedAt
@@ -966,6 +996,7 @@ namespace CapnpGen
             {
                 var reader = READER.create(arg_);
                 Success = reader.Success;
+                Captured = reader.Captured;
                 Failed = reader.Failed;
                 applyDefaults();
             }
@@ -973,6 +1004,7 @@ namespace CapnpGen
             public void serialize(WRITER writer)
             {
                 writer.Success = Success;
+                writer.Captured.Init(Captured);
                 writer.Failed.Init(Failed);
             }
 
@@ -986,6 +1018,12 @@ namespace CapnpGen
             }
 
             public bool Success
+            {
+                get;
+                set;
+            }
+
+            public IReadOnlyList<uint> Captured
             {
                 get;
                 set;
@@ -1009,14 +1047,15 @@ namespace CapnpGen
                 public static implicit operator DeserializerState(READER reader) => reader.ctx;
                 public static implicit operator READER(DeserializerState ctx) => new READER(ctx);
                 public bool Success => ctx.ReadDataBool(0UL, false);
-                public IReadOnlyList<ushort> Failed => ctx.ReadList(0).CastUShort();
+                public IReadOnlyList<uint> Captured => ctx.ReadList(0).CastUInt();
+                public IReadOnlyList<ushort> Failed => ctx.ReadList(1).CastUShort();
             }
 
             public class WRITER : SerializerState
             {
                 public WRITER()
                 {
-                    this.SetStruct(1, 1);
+                    this.SetStruct(1, 2);
                 }
 
                 public bool Success
@@ -1025,10 +1064,16 @@ namespace CapnpGen
                     set => this.WriteData(0UL, value, false);
                 }
 
+                public ListOfPrimitivesSerializer<uint> Captured
+                {
+                    get => BuildPointer<ListOfPrimitivesSerializer<uint>>(0);
+                    set => Link(0, value);
+                }
+
                 public ListOfPrimitivesSerializer<ushort> Failed
                 {
-                    get => BuildPointer<ListOfPrimitivesSerializer<ushort>>(0);
-                    set => Link(0, value);
+                    get => BuildPointer<ListOfPrimitivesSerializer<ushort>>(1);
+                    set => Link(1, value);
                 }
             }
         }
