@@ -1,0 +1,12 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.firehorse
+    environment:
+      FIREHORSE_HOST: "0.0.0.0:42069"
+      FIREHORSE_NUM_CONNECTIONS: "5"
+    # removing localhost will disregard iptables
+    ports:
+      - "127.0.0.1:42069:42069"
+    command: /app/Firehorse

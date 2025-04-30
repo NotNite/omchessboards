@@ -1,0 +1,19 @@
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+
+COPY . /app
+WORKDIR /app/firehorse
+
+RUN apt-get update && \
+    apt-get install -y capnproto libcapnp-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN dotnet restore
+RUN dotnet publish -c Release
+
+# Build runtime image
+FROM mcr.microsoft.com/dotnet/aspnet:9.0
+
+WORKDIR /app
+COPY --from=build /app/firehorse/bin/Release/net9.0/ .
+
+CMD ["/app/Firehorse"]
