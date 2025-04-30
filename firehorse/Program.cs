@@ -1,7 +1,8 @@
-﻿using System.Collections.Concurrent;
-using System.Net;
+﻿using System.Net;
 using System.Threading.Channels;
 using CapnpGen;
+using Firehorse.Chess;
+using Firehorse.Protocol;
 
 namespace Firehorse;
 
@@ -15,27 +16,32 @@ public static class Program {
     public const int HalfSubscriptionSize = SubscriptionSize / 2;
 
     public static async Task Main() {
-        var tasks = new List<Task>();
-
         var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (_, _) => {
             Console.WriteLine("cya");
             cts.Cancel();
         };
 
-        var host = IPEndPoint.Parse(Environment.GetEnvironmentVariable("FIREHORSE_HOST") ?? "127.0.0.1:42069");
-        var numConnections = int.Parse(Environment.GetEnvironmentVariable("FIREHORSE_NUM_CONNECTIONS") ?? "1");
-        Console.WriteLine($"Listening on {host} with {numConnections} connections");
+        var tasks = new List<Task>();
 
-        var commandChannel = Channel.CreateUnbounded<Command.READER>();
-        using var dispatcher = new Dispatcher(host, commandChannel);
+        var snapshotRelay = new ChannelRelay<Snapshot>();
+        var snapshotChannel = Channel.CreateUnbounded<Snapshot>();
+        tasks.Add(Task.Run(() => snapshotRelay.Relay(snapshotChannel, cts.Token), cts.Token));
+
+        var queue = new ScraperPositionQueue();
+        var connectionManager = new ConnectionManager();
+        using var rpc = new FirehorseRpc(snapshotRelay, queue, connectionManager);
+
+        var host = IPEndPoint.Parse(Environment.GetEnvironmentVariable("FIREHORSE_HOST") ?? "127.0.0.1:42069");
+        using var server = new FirehorseServer(host, rpc);
+        Console.WriteLine($"Listening on {host}");
 
         IWebProxy? proxy = null;
         if (Environment.GetEnvironmentVariable("FIREHORSE_PROXY_URL") is { } url) {
             var proxyUsername = Environment.GetEnvironmentVariable("FIREHORSE_PROXY_USERNAME");
             var proxyPassword = Environment.GetEnvironmentVariable("FIREHORSE_PROXY_PASSWORD");
 
-            var credentials = (proxyUsername is not null || proxyPassword is not null)
+            var credentials = proxyUsername is not null || proxyPassword is not null
                 ? new NetworkCredential(proxyUsername, proxyPassword)
                 : null;
 
@@ -50,32 +56,49 @@ public static class Program {
             Console.WriteLine("Not using proxy (be careful!!!)");
         }
 
+        var numConnections = int.Parse(Environment.GetEnvironmentVariable("FIREHORSE_NUM_CONNECTIONS") ?? "1");
+        Console.WriteLine($"Using {numConnections} connections");
+
 #if DEBUG
         Console.WriteLine("Starting in three seconds...");
         await Task.Delay(3000, cts.Token);
 #endif
 
         Console.WriteLine("Creating scrapers...");
-        var queue = new PositionQueue();
         for (var i = 0; i < numConnections; i++) {
             tasks.Add(Task.Run(async () => {
                 while (!cts.Token.IsCancellationRequested) {
                     try {
-                        using var scraper = new Scraper(proxy, queue, dispatcher.Dispatch, commandChannel.Reader);
-                        await scraper.ConnectAsync(cts.Token);
-                        await scraper.RunAsync(cts.Token);
-                        await scraper.DisconnectAsync(cts.Token);
-                    } catch (Exception e) {
-                        Console.WriteLine(e);
+                        using var connection = new Connection(proxy);
+                        connectionManager.AddConnection(connection);
+                        try {
+                            using var scraper = new Scraper(connection, queue, snapshotChannel.Writer);
+
+                            // TODO: go back to using initial state in scraper
+                            await connection.ConnectAsync(cancellationToken: cts.Token);
+
+                            using var scraperCts = new CancellationTokenSource();
+                            using var linked =
+                                CancellationTokenSource.CreateLinkedTokenSource(scraperCts.Token, cts.Token);
+                            await Util.WrapTasks(
+                                scraperCts,
+                                Task.Run(() => connection.RunAsync(linked.Token), linked.Token),
+                                Task.Run(() => scraper.RunAsync(linked.Token), linked.Token)
+                            );
+                        } finally {
+                            connectionManager.RemoveConnection(connection);
+                        }
+                    } catch (Exception) {
+                        // Console.WriteLine(e);
                     }
                 }
             }, cts.Token));
         }
 
         Console.WriteLine("Starting dispatcher...");
-        tasks.Add(dispatcher.RunAsync(cts.Token));
+        tasks.Add(server.RunAsync(cts.Token));
 
         Console.WriteLine("Running, glhf");
-        await Task.WhenAll(tasks);
+        await Util.WrapTasks(cts, tasks);
     }
 }

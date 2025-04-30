@@ -1,5 +1,7 @@
 @0xcd442beccb7770f5;
 
+# copied here because capnpc is dumb as shit
+
 enum PieceType {
   pawn @0;
   knight @1;

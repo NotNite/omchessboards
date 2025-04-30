@@ -1,23 +1,19 @@
 ﻿using System.Collections.Concurrent;
 
-namespace Firehorse;
+namespace Firehorse.Chess;
 
-public class PositionQueue {
+public class ScraperPositionQueue {
     private readonly (uint, uint)[] positions;
     private ConcurrentStack<(uint, uint)> queue = new();
     private readonly Lock refillLock = new();
 
-    public PositionQueue() {
+    public ScraperPositionQueue() {
         var list = new List<(uint, uint)>();
 
         const int end = Program.MapSize - Program.HalfSubscriptionSize;
-        const int duplicate = 3; // add the work a few times to prevent constant refills
-
-        for (var i = 0; i < duplicate; i++) {
-            for (var y = Program.HalfSubscriptionSize; y < end; y += Program.SubscriptionSize) {
-                for (var x = Program.HalfSubscriptionSize; x < end; x += Program.SubscriptionSize) {
-                    list.Add(((uint) x, (uint) y));
-                }
+        for (var y = Program.HalfSubscriptionSize; y < end; y += Program.SubscriptionSize) {
+            for (var x = Program.HalfSubscriptionSize; x < end; x += Program.SubscriptionSize) {
+                list.Add(((uint) x, (uint) y));
             }
         }
 
@@ -27,8 +23,7 @@ public class PositionQueue {
 
     private void Refill() {
         lock (this.refillLock) {
-            // someone else holding this lock refilled it
-            if (!this.queue.IsEmpty) return;
+            if (!this.queue.IsEmpty) return; // someone else holding this lock refilled it
             this.queue = new ConcurrentStack<(uint, uint)>(this.positions);
         }
     }

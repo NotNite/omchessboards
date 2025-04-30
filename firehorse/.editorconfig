@@ -109,3 +109,11 @@ dotnet_naming_symbols.private_static_readonly_symbols.applicable_kinds = field
 dotnet_naming_symbols.private_static_readonly_symbols.required_modifiers = readonly, static
 dotnet_naming_symbols.properties_private__symbols.applicable_accessibilities = private
 dotnet_naming_symbols.properties_private__symbols.applicable_kinds = property
+
+# nice codegen dipshit
+[*.capnp.cs]
+dotnet_diagnostic.CS8601.severity = none
+dotnet_diagnostic.CS8602.severity = none
+dotnet_diagnostic.CS8603.severity = none
+dotnet_diagnostic.CS8618.severity = none
+dotnet_diagnostic.CS8619.severity = none
