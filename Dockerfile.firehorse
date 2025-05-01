@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:9.0@sha256:fe3c1ed472bb0964c100f06aa9b1759f5ed84e0dfe6904d60f6a82159d3c7ae4 AS build
 
 COPY . /app
 WORKDIR /app/firehorse
@@ -8,12 +8,12 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 RUN dotnet restore
-RUN dotnet publish -c Release
+RUN dotnet publish
 
 # Build runtime image
-FROM mcr.microsoft.com/dotnet/aspnet:9.0
+FROM mcr.microsoft.com/dotnet/runtime:9.0@sha256:9d42d7d4d892e2afc571884e9b67f3b1ebb361166ee14151fc6d1bd539cbfeb3
 
 WORKDIR /app
 COPY --from=build /app/firehorse/bin/Release/net9.0/ .
 
-CMD ["/app/Firehorse"]
+CMD ["dotnet", "/app/Firehorse.dll"]

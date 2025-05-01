@@ -1,0 +1,10 @@
+/node_modules
+
+firehorse/.idea/
+firehorse/.vs/
+firehorse/bin/
+firehorse/obj/
+firehorse/*.user
+
+firehorse-test/target
+firehorse-test/*.png
