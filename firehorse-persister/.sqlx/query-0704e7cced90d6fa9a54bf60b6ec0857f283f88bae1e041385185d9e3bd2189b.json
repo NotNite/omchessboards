@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO chess_pieces(piece_id, piece_type, is_white, move_count, capture_count, pos_x, pos_y)\n            SELECT * FROM UNNEST($1::int8[], $2::int8[], $3::bool[], $4::int8[], $5::int8[], $6::int8[], $7::int8[])\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8Array",
+        "Int8Array",
+        "BoolArray",
+        "Int8Array",
+        "Int8Array",
+        "Int8Array",
+        "Int8Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0704e7cced90d6fa9a54bf60b6ec0857f283f88bae1e041385185d9e3bd2189b"
+}
