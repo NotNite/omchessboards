@@ -2,6 +2,7 @@ use async_compression::tokio::{bufread::ZstdDecoder, write::ZstdEncoder};
 use capnp::capability::Promise;
 use capnp_rpc::{RpcSystem, rpc_twoparty_capnp::Side, twoparty::VatNetwork};
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
+use dashmap::DashMap;
 use firehorse_capnp::PieceType;
 use flume::{Receiver, Sender};
 use futures::{
@@ -10,6 +11,8 @@ use futures::{
     try_join,
 };
 use image::RgbImage;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use redis::Commands;
 use std::{
     collections::HashMap,
     hash::Hash,
@@ -227,9 +230,39 @@ fn create_positions() -> Vec<Position> {
 async fn poll(
     rx: Receiver<(Position, SerializedAuditAction)>,
     db: Pool<Postgres>,
-    redis: redis::Client,
+    redis: r2d2::Pool<redis::Client>,
 ) -> eyre::Result<()> {
-    let mut seen_pieces: HashMap<Position, u32> = HashMap::new();
+    let mut seen_pieces: DashMap<Position, u32> = DashMap::new();
+
+    // try to load all the seen pieces from redis
+    let mut redis_con = redis.get()?;
+
+    let x_keys: Vec<String> = redis_con.scan_match("chess:seen:*").unwrap().collect();
+
+    x_keys.par_iter().for_each(|x_hash_key| {
+        let mut x_redis_con = redis.get().unwrap();
+
+        let values: HashMap<String, u32> = redis::cmd("HGETALL")
+            .arg(&x_hash_key)
+            .query(&mut x_redis_con)
+            .unwrap();
+
+        for (y_key, piece_id) in values {
+            // convert y_key to u16
+            let y_key = y_key.parse::<u16>().unwrap();
+
+            // convert chess:piece:1234 -> 1234 to get the x_key
+            let x_key = x_hash_key
+                .as_str()
+                .split(":")
+                .last()
+                .unwrap()
+                .parse::<u16>()
+                .unwrap();
+
+            seen_pieces.insert(Position(x_key, y_key), piece_id);
+        }
+    });
 
     while let Ok((pos, action)) = rx.recv_async().await {
         let mut piece_ids: Vec<i64> = vec![/* ... */];
@@ -239,6 +272,7 @@ async fn poll(
         let mut capture_count: Vec<i64> = vec![/*... */];
         let mut pos_x: Vec<i64> = vec![/*... */];
         let mut pos_y: Vec<i64> = vec![/*... */];
+        let mut insert_pipe = redis::pipe();
 
         for piece in action.pieces {
             // check if we've seen the x/y before
@@ -250,7 +284,7 @@ async fn poll(
                     }
 
                     // Update the piece in the seen pieces if not
-                    *seen_id = piece.id;
+                    seen_pieces.alter(&piece.position, |_, _| piece.id);
                 }
                 None => {
                     // Add the piece to the seen pieces
@@ -266,8 +300,18 @@ async fn poll(
             capture_count.push(piece.capture_count as i64);
             pos_x.push(piece.position.0 as i64);
             pos_y.push(piece.position.1 as i64);
+
+            // append to the redis pipe insertion
+            insert_pipe
+                .hset(
+                    format!("chess:seen:{}", piece.position.0),
+                    piece.position.1,
+                    piece.id,
+                )
+                .ignore();
         }
 
+        // update sql first
         sqlx::query!(
             "
             INSERT INTO chess_pieces(piece_id, piece_type, is_white, move_count, capture_count, pos_x, pos_y)
@@ -282,6 +326,10 @@ async fn poll(
             &pos_y[..],
         ).execute(&db).await?;
         println!("inserted {} pieces", piece_ids.len());
+
+        // update redis next
+        // TODO: how the heck do i actually do this properly :(
+        let _: () = insert_pipe.query(&mut redis_con)?;
     }
 
     Ok(())
@@ -297,6 +345,7 @@ async fn main() -> eyre::Result<()> {
         .await?;
 
     let redis_client = redis::Client::open("redis://127.0.0.1/").unwrap();
+    let redis_pool = r2d2::Pool::builder().build(redis_client).unwrap();
 
     let stream = TcpStream::connect("127.0.0.1:42069").await?;
     println!("connected");
@@ -332,7 +381,7 @@ async fn main() -> eyre::Result<()> {
     listen.get().set_callback(callback_client);
 
     try_join!(
-        poll(rx, db, redis_client),
+        poll(rx, db, redis_pool),
         system.map_err(|e| e.into()),
         listen.send().promise.map_err(|e| e.into()),
     )?;
