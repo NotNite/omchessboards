@@ -192,41 +192,6 @@ impl firehorse_capnp::callback::Server for Callback {
     }
 }
 
-fn create_axis() -> Vec<u16> {
-    // basically exactly matches the logic in Util.cs
-    let mut result = Vec::new();
-
-    const BOARD_SIZE: u16 = 8;
-    const BOARDS_PER_AXIS: u16 = 1000;
-    const MAP_SIZE: u16 = BOARDS_PER_AXIS * BOARD_SIZE;
-
-    const SUBSCRIPTION_SIZE: u16 = 94;
-    const HALF_SUBSCRIPTION_SIZE: u16 = SUBSCRIPTION_SIZE / 2;
-    const MAX_SUBSCRIPTION: u16 = MAP_SIZE - 1;
-
-    let mut i = HALF_SUBSCRIPTION_SIZE;
-    while i < MAP_SIZE {
-        result.push(i);
-        i += SUBSCRIPTION_SIZE;
-    }
-
-    result.push(MAX_SUBSCRIPTION);
-
-    result
-}
-
-fn create_positions() -> Vec<Position> {
-    let mut result = Vec::new();
-
-    for y in create_axis() {
-        for x in create_axis() {
-            result.push(Position(x, y));
-        }
-    }
-
-    result
-}
-
 async fn poll(
     rx: Receiver<(Position, SerializedAuditAction)>,
     db: Pool<Postgres>,
@@ -253,7 +218,7 @@ async fn poll(
             // convert y_key to u16
             let y_key = y_key.parse::<u16>().unwrap();
 
-            // convert chess:piece:1234 -> 1234 to get the x_key
+            // convert [&String] chess:piece:1234 -> [u16] 1234 to get the x_key
             let x_key = x_hash_key
                 .as_str()
                 .split(":")
@@ -269,11 +234,6 @@ async fn poll(
 
     while let Ok((pos, action)) = rx.recv_async().await {
         // HACK(erin): sleep more if there's only 1 item in the channel as a last ditch saving measure
-        if rx.len() == 1 {
-            println!("BREAKGLASS: sleeping for 1000ms");
-            async_std::task::sleep(Duration::from_millis(1000)).await;
-        }
-
         let mut piece_ids: Vec<i64> = vec![/* ... */];
         let mut piece_type: Vec<i64> = vec![/* ... */];
         let mut is_white: Vec<bool> = vec![/*... */];
@@ -291,15 +251,11 @@ async fn poll(
                     if piece.id == *seen_id {
                         continue;
                     }
-
-                    // Update the piece in the seen pieces if not
-                    seen_pieces.alter(&piece.position, |_, _| piece.id);
                 }
-                None => {
-                    // Add the piece to the seen pieces
-                    seen_pieces.insert(piece.position, piece.id);
-                }
+                None => {}
             }
+
+            seen_pieces.alter(&piece.position, |_, _| piece.id);
 
             // insert the piece if we haven't
             piece_ids.push(piece.id as i64);
@@ -323,8 +279,6 @@ async fn poll(
         // ignore empty piece_id sets
         if piece_ids.is_empty() {
             println!("No pieces were inserted, remaining {}!", rx.len());
-            // HACK(erin@): sleeping seems to buy more time before the socket dies. this needs to be looked into :(
-            async_std::task::sleep(Duration::from_millis(100)).await;
             continue;
         }
 
