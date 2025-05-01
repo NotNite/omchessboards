@@ -1,7 +1,4 @@
 ﻿using System.Net;
-using System.Threading.Channels;
-using CapnpGen;
-using Chess;
 using Firehorse.Chess;
 using Firehorse.Protocol;
 
@@ -25,14 +22,10 @@ public static class Program {
 
         var tasks = new List<Task>();
 
-        var snapshotRelay = new ChannelRelay<Snapshot>();
-        var snapshotChannel = Channel.CreateUnbounded<Snapshot>();
-        tasks.Add(Task.Run(() => snapshotRelay.Relay(snapshotChannel, cts.Token), cts.Token));
+        var channels = new SharedChannels();
+        tasks.Add(Task.Run(() => channels.RunAllRelays(cts.Token), cts.Token));
 
-        var positionQueue = new ConstantScraperQueue<(uint, uint)>(CreatePositions());
-        var whiteMoveQueue = new AsyncScraperQueue<ClientMove, ServerValidMove>();
-        var blackMoveQueue = new AsyncScraperQueue<ClientMove, ServerValidMove>();
-        using var rpc = new FirehorseRpc(snapshotRelay, positionQueue, whiteMoveQueue, blackMoveQueue);
+        using var rpc = new FirehorseRpc(channels);
 
         var host = IPEndPoint.Parse(Environment.GetEnvironmentVariable("FIREHORSE_HOST") ?? "127.0.0.1:42069");
         using var server = new FirehorseServer(host, rpc);
@@ -51,6 +44,7 @@ public static class Program {
                 ? $"Using proxy (with auth): {url}"
                 : $"Using proxy (without auth): {url}");
 
+            // TODO: multiple proxies maybe
             proxy = new WebProxy(url) {
                 Credentials = credentials
             };
@@ -68,20 +62,16 @@ public static class Program {
 
         Console.WriteLine("Creating scrapers...");
         for (var i = 0; i < numConnections; i++) {
+            var id = i;
+            // TODO: add the option to create connections one by one when not using a proxy
             tasks.Add(Task.Run(async () => {
                 while (!cts.Token.IsCancellationRequested) {
-                    using var connection = new Connection(proxy);
+                    using var connection = new Connection(proxy, channels);
                     try {
-                        using var scraper = new Scraper(
-                            connection,
-                            positionQueue,
-                            whiteMoveQueue,
-                            blackMoveQueue,
-                            snapshotChannel.Writer
-                        );
+                        using var scraper = new Scraper(connection, channels);
 
-                        // TODO: go back to using initial state in scraper
-                        await connection.ConnectAsync(cancellationToken: cts.Token);
+                        // TODO: go back to using initial state in scraper maybe?
+                        await connection.ConnectAsync(isWhite: id % 2 == 0, cancellationToken: cts.Token);
 
                         using var scraperCts = new CancellationTokenSource();
                         using var linked =
@@ -92,8 +82,8 @@ public static class Program {
                             Task.Run(() => scraper.RunSnapshotsAsync(linked.Token), linked.Token),
                             Task.Run(() => scraper.RunMovesAsync(linked.Token), linked.Token)
                         );
-                    } catch (Exception) {
-                        // Console.WriteLine(e);
+                    } catch (Exception e) {
+                        Console.WriteLine(e);
                     }
                 }
             }, cts.Token));
@@ -104,21 +94,5 @@ public static class Program {
 
         Console.WriteLine("Running, glhf");
         await Util.WrapTasks(cts, tasks);
-    }
-
-    private static List<(uint, uint)> CreatePositions() {
-        const int end = MapSize - HalfSubscriptionSize;
-        const int duplicate = 3; // add the work a few times to prevent constant refills
-
-        var positionList = new List<(uint, uint)>();
-        for (var i = 0; i < duplicate; i++) {
-            for (var y = HalfSubscriptionSize; y < end; y += SubscriptionSize) {
-                for (var x = HalfSubscriptionSize; x < end; x += SubscriptionSize) {
-                    positionList.Add(((uint) x, (uint) y));
-                }
-            }
-        }
-
-        return positionList;
     }
 }

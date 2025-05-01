@@ -3,15 +3,19 @@
 namespace Firehorse.Protocol;
 
 // ReSharper disable InconsistentlySynchronizedField
-public class ChannelRelay<T> {
+public class ChannelRelay<T>(Channel<T> channel) {
+    public ChannelWriter<T> Writer => channel.Writer;
+
     private readonly List<ChannelWriter<T>> writers = [];
+
+    public ChannelRelay() : this(Channel.CreateUnbounded<T>()) { }
 
     public DisposableReader<T> CreateReader() {
         return new DisposableReader<T>(this.writers);
     }
 
-    public async Task Relay(ChannelReader<T> reader, CancellationToken cancellationToken = default) {
-        await foreach (var data in reader.ReadAllAsync(cancellationToken)) {
+    public async Task RunAsync(CancellationToken cancellationToken = default) {
+        await foreach (var data in channel.Reader.ReadAllAsync(cancellationToken)) {
             lock (this.writers) {
                 foreach (var writer in this.writers) {
                     writer.TryWrite(data);

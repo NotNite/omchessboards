@@ -1,37 +1,31 @@
-﻿using System.Threading.Channels;
-using CapnpGen;
-using Chess;
-using PieceType = CapnpGen.PieceType;
+﻿using Chess;
 
 namespace Firehorse.Chess;
 
 public class Scraper(
     Connection connection,
-    ConstantScraperQueue<(uint, uint)> positionQueue,
-    AsyncScraperQueue<ClientMove, ServerValidMove> whiteMoveQueue,
-    AsyncScraperQueue<ClientMove, ServerValidMove> blackMoveQueue,
-    ChannelWriter<Snapshot> snapshotWriter
+    SharedChannels channels
 ) : IDisposable {
     public async Task RunSnapshotsAsync(CancellationToken cancellationToken = default) {
         while (!cancellationToken.IsCancellationRequested) {
-            var (x, y) = positionQueue.Get();
+            var (x, y) = channels.PositionQueue.Get();
 
             ServerStateSnapshot snapshot;
             try {
                 snapshot = await connection.GetSnapshotAsync(x, y, cancellationToken);
             } catch {
                 // Re-submit work if we failed to get it ourselves
-                positionQueue.Submit((x, y));
+                channels.PositionQueue.Submit((x, y));
                 throw;
             }
 
-            snapshotWriter.TryWrite(Util.ConvertSnapshotToFirehorse(snapshot));
+            channels.SnapshotRelay.Writer.TryWrite(Util.ConvertSnapshotToFirehorse(snapshot));
         }
     }
 
     public async Task RunMovesAsync(CancellationToken cancellationToken = default) {
         var isWhite = await connection.IsWhite.Task.WaitAsync(cancellationToken);
-        var moveQueue = isWhite ? whiteMoveQueue : blackMoveQueue;
+        var moveQueue = isWhite ? channels.WhiteMoveQueue : channels.BlackMoveQueue;
 
         while (!cancellationToken.IsCancellationRequested) {
             var (data, tcs) = await moveQueue.GetAsync(cancellationToken);

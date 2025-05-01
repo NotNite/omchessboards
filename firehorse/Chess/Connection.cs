@@ -1,6 +1,8 @@
-﻿using System.Net;
+﻿using System.Collections.Immutable;
+using System.Net;
 using System.Net.WebSockets;
 using System.Web;
+using CapnpGen;
 using Chess;
 using Google.Protobuf;
 using ZstdSharp;
@@ -18,6 +20,7 @@ public class Connection : IDisposable {
     public bool Connected => this.ws.State is WebSocketState.Open;
     public readonly TaskCompletionSource<bool> IsWhite = new();
 
+    private readonly SharedChannels channels;
     private readonly ClientWebSocket ws;
     private readonly Decompressor zstd;
     private readonly Timer timer;
@@ -25,12 +28,12 @@ public class Connection : IDisposable {
     private readonly List<Func<ServerMessage, bool>> eventHandlers = [];
     private readonly SemaphoreSlim moveSemaphore = new(1);
 
-    public Connection(IWebProxy? proxy) {
+    public Connection(IWebProxy? proxy, SharedChannels channels) {
+        this.channels = channels;
         this.ws = new ClientWebSocket();
         this.ws.Options.Proxy = proxy;
 
         this.zstd = new Decompressor();
-
         this.timer = new Timer(this.OnTimer);
     }
 
@@ -77,8 +80,50 @@ public class Connection : IDisposable {
     }
 
     private void HandleMessage(ServerMessage message) {
-        if (message.PayloadCase is ServerMessage.PayloadOneofCase.InitialState) {
-            this.IsWhite.SetResult(message.InitialState.PlayingWhite);
+        // This is a weird place to have this here for abstraction but it's easier than dealing with events
+        switch (message.PayloadCase) {
+            case ServerMessage.PayloadOneofCase.InitialState: {
+                this.IsWhite.SetResult(message.InitialState.PlayingWhite);
+                break;
+            }
+
+            case ServerMessage.PayloadOneofCase.MovesAndCaptures: {
+                var moves = message.MovesAndCaptures.Moves;
+                if (moves.Count != 0) {
+                    var result = moves
+                                .Select(Util.ConvertMovePieceToFirehorse)
+                                .ToImmutableList();
+                    this.channels.MoveRelay.Writer.TryWrite(result);
+                }
+
+                var captures = message.MovesAndCaptures.Captures;
+                if (captures.Count != 0) {
+                    var result = captures
+                                .Select(Util.ConvertPieceCaptureToFirehorse)
+                                .ToImmutableList();
+                    this.channels.CaptureRelay.Writer.TryWrite(result);
+                }
+
+                break;
+            }
+
+            case ServerMessage.PayloadOneofCase.BulkCapture: {
+                var payload = message.BulkCapture;
+                var result = payload.CapturedIds
+                                    .Select(id => new MoveResult() {
+                                         // yes I'm duplicating seqnum here every time. who gives a shit
+                                         Seqnum = payload.Seqnum,
+                                         CapturedPieceId = id
+                                     })
+                                    .ToImmutableList();
+                this.channels.CaptureRelay.Writer.TryWrite(result);
+                break;
+            }
+
+            case ServerMessage.PayloadOneofCase.Adoption: {
+                this.channels.AdoptRelay.Writer.TryWrite(message.Adoption.AdoptedIds);
+                break;
+            }
         }
 
         // lock contention isn't real and can't hurt you

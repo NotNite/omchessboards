@@ -28,28 +28,28 @@ namespace CapnpGen
         enPassant
     }
 
-    [System.CodeDom.Compiler.GeneratedCode("capnpc-csharp", "1.3.0.0"), TypeId(0x8625d1be53206cfeUL)]
-    public class Piece : ICapnpSerializable
+    [System.CodeDom.Compiler.GeneratedCode("capnpc-csharp", "1.3.0.0"), TypeId(0xefa56ea98d1ea1cdUL)]
+    public class PieceData : ICapnpSerializable
     {
-        public const UInt64 typeId = 0x8625d1be53206cfeUL;
+        public const UInt64 typeId = 0xefa56ea98d1ea1cdUL;
         void ICapnpSerializable.Deserialize(DeserializerState arg_)
         {
             var reader = READER.create(arg_);
             Id = reader.Id;
-            Dx = reader.Dx;
-            Dy = reader.Dy;
             Type = reader.Type;
             IsWhite = reader.IsWhite;
+            MoveCount = reader.MoveCount;
+            CaptureCount = reader.CaptureCount;
             applyDefaults();
         }
 
         public void serialize(WRITER writer)
         {
             writer.Id = Id;
-            writer.Dx = Dx;
-            writer.Dy = Dy;
             writer.Type = Type;
             writer.IsWhite = IsWhite;
+            writer.MoveCount = MoveCount;
+            writer.CaptureCount = CaptureCount;
         }
 
         void ICapnpSerializable.Serialize(SerializerState arg_)
@@ -67,18 +67,6 @@ namespace CapnpGen
             set;
         }
 
-        public sbyte Dx
-        {
-            get;
-            set;
-        }
-
-        public sbyte Dy
-        {
-            get;
-            set;
-        }
-
         public CapnpGen.PieceType Type
         {
             get;
@@ -86,6 +74,18 @@ namespace CapnpGen
         }
 
         public bool IsWhite
+        {
+            get;
+            set;
+        }
+
+        public uint MoveCount
+        {
+            get;
+            set;
+        }
+
+        public uint CaptureCount
         {
             get;
             set;
@@ -103,10 +103,10 @@ namespace CapnpGen
             public static implicit operator DeserializerState(READER reader) => reader.ctx;
             public static implicit operator READER(DeserializerState ctx) => new READER(ctx);
             public uint Id => ctx.ReadDataUInt(0UL, 0U);
-            public sbyte Dx => ctx.ReadDataSByte(32UL, (sbyte)0);
-            public sbyte Dy => ctx.ReadDataSByte(40UL, (sbyte)0);
-            public CapnpGen.PieceType Type => (CapnpGen.PieceType)ctx.ReadDataUShort(48UL, (ushort)0);
-            public bool IsWhite => ctx.ReadDataBool(64UL, false);
+            public CapnpGen.PieceType Type => (CapnpGen.PieceType)ctx.ReadDataUShort(32UL, (ushort)0);
+            public bool IsWhite => ctx.ReadDataBool(48UL, false);
+            public uint MoveCount => ctx.ReadDataUInt(64UL, 0U);
+            public uint CaptureCount => ctx.ReadDataUInt(96UL, 0U);
         }
 
         public class WRITER : SerializerState
@@ -122,28 +122,118 @@ namespace CapnpGen
                 set => this.WriteData(0UL, value, 0U);
             }
 
-            public sbyte Dx
-            {
-                get => this.ReadDataSByte(32UL, (sbyte)0);
-                set => this.WriteData(32UL, value, (sbyte)0);
-            }
-
-            public sbyte Dy
-            {
-                get => this.ReadDataSByte(40UL, (sbyte)0);
-                set => this.WriteData(40UL, value, (sbyte)0);
-            }
-
             public CapnpGen.PieceType Type
             {
-                get => (CapnpGen.PieceType)this.ReadDataUShort(48UL, (ushort)0);
-                set => this.WriteData(48UL, (ushort)value, (ushort)0);
+                get => (CapnpGen.PieceType)this.ReadDataUShort(32UL, (ushort)0);
+                set => this.WriteData(32UL, (ushort)value, (ushort)0);
             }
 
             public bool IsWhite
             {
-                get => this.ReadDataBool(64UL, false);
-                set => this.WriteData(64UL, value, false);
+                get => this.ReadDataBool(48UL, false);
+                set => this.WriteData(48UL, value, false);
+            }
+
+            public uint MoveCount
+            {
+                get => this.ReadDataUInt(64UL, 0U);
+                set => this.WriteData(64UL, value, 0U);
+            }
+
+            public uint CaptureCount
+            {
+                get => this.ReadDataUInt(96UL, 0U);
+                set => this.WriteData(96UL, value, 0U);
+            }
+        }
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("capnpc-csharp", "1.3.0.0"), TypeId(0xc07a3d23a2954206UL)]
+    public class SnapshotPiece : ICapnpSerializable
+    {
+        public const UInt64 typeId = 0xc07a3d23a2954206UL;
+        void ICapnpSerializable.Deserialize(DeserializerState arg_)
+        {
+            var reader = READER.create(arg_);
+            Dx = reader.Dx;
+            Dy = reader.Dy;
+            Data = CapnpSerializable.Create<CapnpGen.PieceData>(reader.Data);
+            applyDefaults();
+        }
+
+        public void serialize(WRITER writer)
+        {
+            writer.Dx = Dx;
+            writer.Dy = Dy;
+            Data?.serialize(writer.Data);
+        }
+
+        void ICapnpSerializable.Serialize(SerializerState arg_)
+        {
+            serialize(arg_.Rewrap<WRITER>());
+        }
+
+        public void applyDefaults()
+        {
+        }
+
+        public sbyte Dx
+        {
+            get;
+            set;
+        }
+
+        public sbyte Dy
+        {
+            get;
+            set;
+        }
+
+        public CapnpGen.PieceData Data
+        {
+            get;
+            set;
+        }
+
+        public struct READER
+        {
+            readonly DeserializerState ctx;
+            public READER(DeserializerState ctx)
+            {
+                this.ctx = ctx;
+            }
+
+            public static READER create(DeserializerState ctx) => new READER(ctx);
+            public static implicit operator DeserializerState(READER reader) => reader.ctx;
+            public static implicit operator READER(DeserializerState ctx) => new READER(ctx);
+            public sbyte Dx => ctx.ReadDataSByte(0UL, (sbyte)0);
+            public sbyte Dy => ctx.ReadDataSByte(8UL, (sbyte)0);
+            public CapnpGen.PieceData.READER Data => ctx.ReadStruct(0, CapnpGen.PieceData.READER.create);
+        }
+
+        public class WRITER : SerializerState
+        {
+            public WRITER()
+            {
+                this.SetStruct(1, 1);
+            }
+
+            public sbyte Dx
+            {
+                get => this.ReadDataSByte(0UL, (sbyte)0);
+                set => this.WriteData(0UL, value, (sbyte)0);
+            }
+
+            public sbyte Dy
+            {
+                get => this.ReadDataSByte(8UL, (sbyte)0);
+                set => this.WriteData(8UL, value, (sbyte)0);
+            }
+
+            public CapnpGen.PieceData.WRITER Data
+            {
+                get => BuildPointer<CapnpGen.PieceData.WRITER>(0);
+                set => Link(0, value);
             }
         }
     }
@@ -157,7 +247,7 @@ namespace CapnpGen
             var reader = READER.create(arg_);
             X = reader.X;
             Y = reader.Y;
-            Pieces = reader.Pieces?.ToReadOnlyList(_ => CapnpSerializable.Create<CapnpGen.Piece>(_));
+            Pieces = reader.Pieces?.ToReadOnlyList(_ => CapnpSerializable.Create<CapnpGen.SnapshotPiece>(_));
             applyDefaults();
         }
 
@@ -189,7 +279,7 @@ namespace CapnpGen
             set;
         }
 
-        public IReadOnlyList<CapnpGen.Piece> Pieces
+        public IReadOnlyList<CapnpGen.SnapshotPiece> Pieces
         {
             get;
             set;
@@ -208,7 +298,7 @@ namespace CapnpGen
             public static implicit operator READER(DeserializerState ctx) => new READER(ctx);
             public ushort X => ctx.ReadDataUShort(0UL, (ushort)0);
             public ushort Y => ctx.ReadDataUShort(16UL, (ushort)0);
-            public IReadOnlyList<CapnpGen.Piece.READER> Pieces => ctx.ReadList(0).Cast(CapnpGen.Piece.READER.create);
+            public IReadOnlyList<CapnpGen.SnapshotPiece.READER> Pieces => ctx.ReadList(0).Cast(CapnpGen.SnapshotPiece.READER.create);
         }
 
         public class WRITER : SerializerState
@@ -230,9 +320,9 @@ namespace CapnpGen
                 set => this.WriteData(16UL, value, (ushort)0);
             }
 
-            public ListOfStructsSerializer<CapnpGen.Piece.WRITER> Pieces
+            public ListOfStructsSerializer<CapnpGen.SnapshotPiece.WRITER> Pieces
             {
-                get => BuildPointer<ListOfStructsSerializer<CapnpGen.Piece.WRITER>>(0);
+                get => BuildPointer<ListOfStructsSerializer<CapnpGen.SnapshotPiece.WRITER>>(0);
                 set => Link(0, value);
             }
         }
@@ -388,10 +478,193 @@ namespace CapnpGen
         }
     }
 
+    [System.CodeDom.Compiler.GeneratedCode("capnpc-csharp", "1.3.0.0"), TypeId(0xa26492155ea5b32eUL)]
+    public class MoveResult : ICapnpSerializable
+    {
+        public const UInt64 typeId = 0xa26492155ea5b32eUL;
+        void ICapnpSerializable.Deserialize(DeserializerState arg_)
+        {
+            var reader = READER.create(arg_);
+            Seqnum = reader.Seqnum;
+            CapturedPieceId = reader.CapturedPieceId;
+            applyDefaults();
+        }
+
+        public void serialize(WRITER writer)
+        {
+            writer.Seqnum = Seqnum;
+            writer.CapturedPieceId = CapturedPieceId;
+        }
+
+        void ICapnpSerializable.Serialize(SerializerState arg_)
+        {
+            serialize(arg_.Rewrap<WRITER>());
+        }
+
+        public void applyDefaults()
+        {
+        }
+
+        public ulong Seqnum
+        {
+            get;
+            set;
+        }
+
+        public uint CapturedPieceId
+        {
+            get;
+            set;
+        }
+
+        public struct READER
+        {
+            readonly DeserializerState ctx;
+            public READER(DeserializerState ctx)
+            {
+                this.ctx = ctx;
+            }
+
+            public static READER create(DeserializerState ctx) => new READER(ctx);
+            public static implicit operator DeserializerState(READER reader) => reader.ctx;
+            public static implicit operator READER(DeserializerState ctx) => new READER(ctx);
+            public ulong Seqnum => ctx.ReadDataULong(0UL, 0UL);
+            public uint CapturedPieceId => ctx.ReadDataUInt(64UL, 0U);
+        }
+
+        public class WRITER : SerializerState
+        {
+            public WRITER()
+            {
+                this.SetStruct(2, 0);
+            }
+
+            public ulong Seqnum
+            {
+                get => this.ReadDataULong(0UL, 0UL);
+                set => this.WriteData(0UL, value, 0UL);
+            }
+
+            public uint CapturedPieceId
+            {
+                get => this.ReadDataUInt(64UL, 0U);
+                set => this.WriteData(64UL, value, 0U);
+            }
+        }
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("capnpc-csharp", "1.3.0.0"), TypeId(0x9e4c88ac96f28052UL)]
+    public class RemoteMove : ICapnpSerializable
+    {
+        public const UInt64 typeId = 0x9e4c88ac96f28052UL;
+        void ICapnpSerializable.Deserialize(DeserializerState arg_)
+        {
+            var reader = READER.create(arg_);
+            Seqnum = reader.Seqnum;
+            X = reader.X;
+            Y = reader.Y;
+            Data = CapnpSerializable.Create<CapnpGen.PieceData>(reader.Data);
+            applyDefaults();
+        }
+
+        public void serialize(WRITER writer)
+        {
+            writer.Seqnum = Seqnum;
+            writer.X = X;
+            writer.Y = Y;
+            Data?.serialize(writer.Data);
+        }
+
+        void ICapnpSerializable.Serialize(SerializerState arg_)
+        {
+            serialize(arg_.Rewrap<WRITER>());
+        }
+
+        public void applyDefaults()
+        {
+        }
+
+        public ulong Seqnum
+        {
+            get;
+            set;
+        }
+
+        public ushort X
+        {
+            get;
+            set;
+        }
+
+        public ushort Y
+        {
+            get;
+            set;
+        }
+
+        public CapnpGen.PieceData Data
+        {
+            get;
+            set;
+        }
+
+        public struct READER
+        {
+            readonly DeserializerState ctx;
+            public READER(DeserializerState ctx)
+            {
+                this.ctx = ctx;
+            }
+
+            public static READER create(DeserializerState ctx) => new READER(ctx);
+            public static implicit operator DeserializerState(READER reader) => reader.ctx;
+            public static implicit operator READER(DeserializerState ctx) => new READER(ctx);
+            public ulong Seqnum => ctx.ReadDataULong(0UL, 0UL);
+            public ushort X => ctx.ReadDataUShort(64UL, (ushort)0);
+            public ushort Y => ctx.ReadDataUShort(80UL, (ushort)0);
+            public CapnpGen.PieceData.READER Data => ctx.ReadStruct(0, CapnpGen.PieceData.READER.create);
+        }
+
+        public class WRITER : SerializerState
+        {
+            public WRITER()
+            {
+                this.SetStruct(2, 1);
+            }
+
+            public ulong Seqnum
+            {
+                get => this.ReadDataULong(0UL, 0UL);
+                set => this.WriteData(0UL, value, 0UL);
+            }
+
+            public ushort X
+            {
+                get => this.ReadDataUShort(64UL, (ushort)0);
+                set => this.WriteData(64UL, value, (ushort)0);
+            }
+
+            public ushort Y
+            {
+                get => this.ReadDataUShort(80UL, (ushort)0);
+                set => this.WriteData(80UL, value, (ushort)0);
+            }
+
+            public CapnpGen.PieceData.WRITER Data
+            {
+                get => BuildPointer<CapnpGen.PieceData.WRITER>(0);
+                set => Link(0, value);
+            }
+        }
+    }
+
     [System.CodeDom.Compiler.GeneratedCode("capnpc-csharp", "1.3.0.0"), TypeId(0xcd7e2e8a7a7319d9UL), Proxy(typeof(Callback_Proxy)), Skeleton(typeof(Callback_Skeleton))]
     public interface ICallback : IDisposable
     {
         Task OnSnapshot(CapnpGen.Snapshot snapshot, CancellationToken cancellationToken_ = default);
+        Task OnPiecesMoved(IReadOnlyList<CapnpGen.RemoteMove> moves, CancellationToken cancellationToken_ = default);
+        Task OnPiecesCaptured(IReadOnlyList<CapnpGen.MoveResult> captures, CancellationToken cancellationToken_ = default);
+        Task OnPiecesAdopted(IReadOnlyList<uint> ids, CancellationToken cancellationToken_ = default);
     }
 
     [System.CodeDom.Compiler.GeneratedCode("capnpc-csharp", "1.3.0.0"), TypeId(0xcd7e2e8a7a7319d9UL)]
@@ -409,6 +682,45 @@ namespace CapnpGen
                 return;
             }
         }
+
+        public async Task OnPiecesMoved(IReadOnlyList<CapnpGen.RemoteMove> moves, CancellationToken cancellationToken_ = default)
+        {
+            var in_ = SerializerState.CreateForRpc<CapnpGen.Callback.Params_OnPiecesMoved.WRITER>();
+            var arg_ = new CapnpGen.Callback.Params_OnPiecesMoved()
+            {Moves = moves};
+            arg_?.serialize(in_);
+            using (var d_ = await Call(14807323797135497689UL, 1, in_.Rewrap<DynamicSerializerState>(), false, cancellationToken_).WhenReturned)
+            {
+                var r_ = CapnpSerializable.Create<CapnpGen.Callback.Result_OnPiecesMoved>(d_);
+                return;
+            }
+        }
+
+        public async Task OnPiecesCaptured(IReadOnlyList<CapnpGen.MoveResult> captures, CancellationToken cancellationToken_ = default)
+        {
+            var in_ = SerializerState.CreateForRpc<CapnpGen.Callback.Params_OnPiecesCaptured.WRITER>();
+            var arg_ = new CapnpGen.Callback.Params_OnPiecesCaptured()
+            {Captures = captures};
+            arg_?.serialize(in_);
+            using (var d_ = await Call(14807323797135497689UL, 2, in_.Rewrap<DynamicSerializerState>(), false, cancellationToken_).WhenReturned)
+            {
+                var r_ = CapnpSerializable.Create<CapnpGen.Callback.Result_OnPiecesCaptured>(d_);
+                return;
+            }
+        }
+
+        public async Task OnPiecesAdopted(IReadOnlyList<uint> ids, CancellationToken cancellationToken_ = default)
+        {
+            var in_ = SerializerState.CreateForRpc<CapnpGen.Callback.Params_OnPiecesAdopted.WRITER>();
+            var arg_ = new CapnpGen.Callback.Params_OnPiecesAdopted()
+            {Ids = ids};
+            arg_?.serialize(in_);
+            using (var d_ = await Call(14807323797135497689UL, 3, in_.Rewrap<DynamicSerializerState>(), false, cancellationToken_).WhenReturned)
+            {
+                var r_ = CapnpSerializable.Create<CapnpGen.Callback.Result_OnPiecesAdopted>(d_);
+                return;
+            }
+        }
     }
 
     [System.CodeDom.Compiler.GeneratedCode("capnpc-csharp", "1.3.0.0"), TypeId(0xcd7e2e8a7a7319d9UL)]
@@ -416,7 +728,7 @@ namespace CapnpGen
     {
         public Callback_Skeleton()
         {
-            SetMethodTable(OnSnapshot);
+            SetMethodTable(OnSnapshot, OnPiecesMoved, OnPiecesCaptured, OnPiecesAdopted);
         }
 
         public override ulong InterfaceId => 14807323797135497689UL;
@@ -427,6 +739,39 @@ namespace CapnpGen
                 var in_ = CapnpSerializable.Create<CapnpGen.Callback.Params_OnSnapshot>(d_);
                 await Impl.OnSnapshot(in_.Snapshot, cancellationToken_);
                 var s_ = SerializerState.CreateForRpc<CapnpGen.Callback.Result_OnSnapshot.WRITER>();
+                return s_;
+            }
+        }
+
+        async Task<AnswerOrCounterquestion> OnPiecesMoved(DeserializerState d_, CancellationToken cancellationToken_)
+        {
+            using (d_)
+            {
+                var in_ = CapnpSerializable.Create<CapnpGen.Callback.Params_OnPiecesMoved>(d_);
+                await Impl.OnPiecesMoved(in_.Moves, cancellationToken_);
+                var s_ = SerializerState.CreateForRpc<CapnpGen.Callback.Result_OnPiecesMoved.WRITER>();
+                return s_;
+            }
+        }
+
+        async Task<AnswerOrCounterquestion> OnPiecesCaptured(DeserializerState d_, CancellationToken cancellationToken_)
+        {
+            using (d_)
+            {
+                var in_ = CapnpSerializable.Create<CapnpGen.Callback.Params_OnPiecesCaptured>(d_);
+                await Impl.OnPiecesCaptured(in_.Captures, cancellationToken_);
+                var s_ = SerializerState.CreateForRpc<CapnpGen.Callback.Result_OnPiecesCaptured.WRITER>();
+                return s_;
+            }
+        }
+
+        async Task<AnswerOrCounterquestion> OnPiecesAdopted(DeserializerState d_, CancellationToken cancellationToken_)
+        {
+            using (d_)
+            {
+                var in_ = CapnpSerializable.Create<CapnpGen.Callback.Params_OnPiecesAdopted>(d_);
+                await Impl.OnPiecesAdopted(in_.Ids, cancellationToken_);
+                var s_ = SerializerState.CreateForRpc<CapnpGen.Callback.Result_OnPiecesAdopted.WRITER>();
                 return s_;
             }
         }
@@ -538,14 +883,329 @@ namespace CapnpGen
                 }
             }
         }
+
+        [System.CodeDom.Compiler.GeneratedCode("capnpc-csharp", "1.3.0.0"), TypeId(0xc6c03fe81f39a76aUL)]
+        public class Params_OnPiecesMoved : ICapnpSerializable
+        {
+            public const UInt64 typeId = 0xc6c03fe81f39a76aUL;
+            void ICapnpSerializable.Deserialize(DeserializerState arg_)
+            {
+                var reader = READER.create(arg_);
+                Moves = reader.Moves?.ToReadOnlyList(_ => CapnpSerializable.Create<CapnpGen.RemoteMove>(_));
+                applyDefaults();
+            }
+
+            public void serialize(WRITER writer)
+            {
+                writer.Moves.Init(Moves, (_s1, _v1) => _v1?.serialize(_s1));
+            }
+
+            void ICapnpSerializable.Serialize(SerializerState arg_)
+            {
+                serialize(arg_.Rewrap<WRITER>());
+            }
+
+            public void applyDefaults()
+            {
+            }
+
+            public IReadOnlyList<CapnpGen.RemoteMove> Moves
+            {
+                get;
+                set;
+            }
+
+            public struct READER
+            {
+                readonly DeserializerState ctx;
+                public READER(DeserializerState ctx)
+                {
+                    this.ctx = ctx;
+                }
+
+                public static READER create(DeserializerState ctx) => new READER(ctx);
+                public static implicit operator DeserializerState(READER reader) => reader.ctx;
+                public static implicit operator READER(DeserializerState ctx) => new READER(ctx);
+                public IReadOnlyList<CapnpGen.RemoteMove.READER> Moves => ctx.ReadList(0).Cast(CapnpGen.RemoteMove.READER.create);
+            }
+
+            public class WRITER : SerializerState
+            {
+                public WRITER()
+                {
+                    this.SetStruct(0, 1);
+                }
+
+                public ListOfStructsSerializer<CapnpGen.RemoteMove.WRITER> Moves
+                {
+                    get => BuildPointer<ListOfStructsSerializer<CapnpGen.RemoteMove.WRITER>>(0);
+                    set => Link(0, value);
+                }
+            }
+        }
+
+        [System.CodeDom.Compiler.GeneratedCode("capnpc-csharp", "1.3.0.0"), TypeId(0xdabac01b3777f48aUL)]
+        public class Result_OnPiecesMoved : ICapnpSerializable
+        {
+            public const UInt64 typeId = 0xdabac01b3777f48aUL;
+            void ICapnpSerializable.Deserialize(DeserializerState arg_)
+            {
+                var reader = READER.create(arg_);
+                applyDefaults();
+            }
+
+            public void serialize(WRITER writer)
+            {
+            }
+
+            void ICapnpSerializable.Serialize(SerializerState arg_)
+            {
+                serialize(arg_.Rewrap<WRITER>());
+            }
+
+            public void applyDefaults()
+            {
+            }
+
+            public struct READER
+            {
+                readonly DeserializerState ctx;
+                public READER(DeserializerState ctx)
+                {
+                    this.ctx = ctx;
+                }
+
+                public static READER create(DeserializerState ctx) => new READER(ctx);
+                public static implicit operator DeserializerState(READER reader) => reader.ctx;
+                public static implicit operator READER(DeserializerState ctx) => new READER(ctx);
+            }
+
+            public class WRITER : SerializerState
+            {
+                public WRITER()
+                {
+                    this.SetStruct(0, 0);
+                }
+            }
+        }
+
+        [System.CodeDom.Compiler.GeneratedCode("capnpc-csharp", "1.3.0.0"), TypeId(0x886f202925e9e41bUL)]
+        public class Params_OnPiecesCaptured : ICapnpSerializable
+        {
+            public const UInt64 typeId = 0x886f202925e9e41bUL;
+            void ICapnpSerializable.Deserialize(DeserializerState arg_)
+            {
+                var reader = READER.create(arg_);
+                Captures = reader.Captures?.ToReadOnlyList(_ => CapnpSerializable.Create<CapnpGen.MoveResult>(_));
+                applyDefaults();
+            }
+
+            public void serialize(WRITER writer)
+            {
+                writer.Captures.Init(Captures, (_s1, _v1) => _v1?.serialize(_s1));
+            }
+
+            void ICapnpSerializable.Serialize(SerializerState arg_)
+            {
+                serialize(arg_.Rewrap<WRITER>());
+            }
+
+            public void applyDefaults()
+            {
+            }
+
+            public IReadOnlyList<CapnpGen.MoveResult> Captures
+            {
+                get;
+                set;
+            }
+
+            public struct READER
+            {
+                readonly DeserializerState ctx;
+                public READER(DeserializerState ctx)
+                {
+                    this.ctx = ctx;
+                }
+
+                public static READER create(DeserializerState ctx) => new READER(ctx);
+                public static implicit operator DeserializerState(READER reader) => reader.ctx;
+                public static implicit operator READER(DeserializerState ctx) => new READER(ctx);
+                public IReadOnlyList<CapnpGen.MoveResult.READER> Captures => ctx.ReadList(0).Cast(CapnpGen.MoveResult.READER.create);
+            }
+
+            public class WRITER : SerializerState
+            {
+                public WRITER()
+                {
+                    this.SetStruct(0, 1);
+                }
+
+                public ListOfStructsSerializer<CapnpGen.MoveResult.WRITER> Captures
+                {
+                    get => BuildPointer<ListOfStructsSerializer<CapnpGen.MoveResult.WRITER>>(0);
+                    set => Link(0, value);
+                }
+            }
+        }
+
+        [System.CodeDom.Compiler.GeneratedCode("capnpc-csharp", "1.3.0.0"), TypeId(0xffb7c24e412e328cUL)]
+        public class Result_OnPiecesCaptured : ICapnpSerializable
+        {
+            public const UInt64 typeId = 0xffb7c24e412e328cUL;
+            void ICapnpSerializable.Deserialize(DeserializerState arg_)
+            {
+                var reader = READER.create(arg_);
+                applyDefaults();
+            }
+
+            public void serialize(WRITER writer)
+            {
+            }
+
+            void ICapnpSerializable.Serialize(SerializerState arg_)
+            {
+                serialize(arg_.Rewrap<WRITER>());
+            }
+
+            public void applyDefaults()
+            {
+            }
+
+            public struct READER
+            {
+                readonly DeserializerState ctx;
+                public READER(DeserializerState ctx)
+                {
+                    this.ctx = ctx;
+                }
+
+                public static READER create(DeserializerState ctx) => new READER(ctx);
+                public static implicit operator DeserializerState(READER reader) => reader.ctx;
+                public static implicit operator READER(DeserializerState ctx) => new READER(ctx);
+            }
+
+            public class WRITER : SerializerState
+            {
+                public WRITER()
+                {
+                    this.SetStruct(0, 0);
+                }
+            }
+        }
+
+        [System.CodeDom.Compiler.GeneratedCode("capnpc-csharp", "1.3.0.0"), TypeId(0xb9549c47fa672c11UL)]
+        public class Params_OnPiecesAdopted : ICapnpSerializable
+        {
+            public const UInt64 typeId = 0xb9549c47fa672c11UL;
+            void ICapnpSerializable.Deserialize(DeserializerState arg_)
+            {
+                var reader = READER.create(arg_);
+                Ids = reader.Ids;
+                applyDefaults();
+            }
+
+            public void serialize(WRITER writer)
+            {
+                writer.Ids.Init(Ids);
+            }
+
+            void ICapnpSerializable.Serialize(SerializerState arg_)
+            {
+                serialize(arg_.Rewrap<WRITER>());
+            }
+
+            public void applyDefaults()
+            {
+            }
+
+            public IReadOnlyList<uint> Ids
+            {
+                get;
+                set;
+            }
+
+            public struct READER
+            {
+                readonly DeserializerState ctx;
+                public READER(DeserializerState ctx)
+                {
+                    this.ctx = ctx;
+                }
+
+                public static READER create(DeserializerState ctx) => new READER(ctx);
+                public static implicit operator DeserializerState(READER reader) => reader.ctx;
+                public static implicit operator READER(DeserializerState ctx) => new READER(ctx);
+                public IReadOnlyList<uint> Ids => ctx.ReadList(0).CastUInt();
+            }
+
+            public class WRITER : SerializerState
+            {
+                public WRITER()
+                {
+                    this.SetStruct(0, 1);
+                }
+
+                public ListOfPrimitivesSerializer<uint> Ids
+                {
+                    get => BuildPointer<ListOfPrimitivesSerializer<uint>>(0);
+                    set => Link(0, value);
+                }
+            }
+        }
+
+        [System.CodeDom.Compiler.GeneratedCode("capnpc-csharp", "1.3.0.0"), TypeId(0xc06dcb993fcbeaf3UL)]
+        public class Result_OnPiecesAdopted : ICapnpSerializable
+        {
+            public const UInt64 typeId = 0xc06dcb993fcbeaf3UL;
+            void ICapnpSerializable.Deserialize(DeserializerState arg_)
+            {
+                var reader = READER.create(arg_);
+                applyDefaults();
+            }
+
+            public void serialize(WRITER writer)
+            {
+            }
+
+            void ICapnpSerializable.Serialize(SerializerState arg_)
+            {
+                serialize(arg_.Rewrap<WRITER>());
+            }
+
+            public void applyDefaults()
+            {
+            }
+
+            public struct READER
+            {
+                readonly DeserializerState ctx;
+                public READER(DeserializerState ctx)
+                {
+                    this.ctx = ctx;
+                }
+
+                public static READER create(DeserializerState ctx) => new READER(ctx);
+                public static implicit operator DeserializerState(READER reader) => reader.ctx;
+                public static implicit operator READER(DeserializerState ctx) => new READER(ctx);
+            }
+
+            public class WRITER : SerializerState
+            {
+                public WRITER()
+                {
+                    this.SetStruct(0, 0);
+                }
+            }
+        }
     }
 
     [System.CodeDom.Compiler.GeneratedCode("capnpc-csharp", "1.3.0.0"), TypeId(0xb2613225c67ed861UL), Proxy(typeof(Firehorse_Proxy)), Skeleton(typeof(Firehorse_Skeleton))]
     public interface IFirehorse : IDisposable
     {
         Task Listen(CapnpGen.ICallback callback, CancellationToken cancellationToken_ = default);
-        Task<(bool, IReadOnlyList<uint>, ushort)> MoveSequential(IReadOnlyList<CapnpGen.Move> moves, CancellationToken cancellationToken_ = default);
-        Task<(bool, IReadOnlyList<uint>, IReadOnlyList<ushort>)> MoveParallel(IReadOnlyList<CapnpGen.Move> moves, CancellationToken cancellationToken_ = default);
+        Task<(bool, IReadOnlyList<CapnpGen.MoveResult>, ushort)> MoveSequential(IReadOnlyList<CapnpGen.Move> moves, CancellationToken cancellationToken_ = default);
+        Task<(bool, IReadOnlyList<CapnpGen.MoveResult>, IReadOnlyList<ushort>)> MoveParallel(IReadOnlyList<CapnpGen.Move> moves, CancellationToken cancellationToken_ = default);
         Task Queue(ushort x, ushort y, CancellationToken cancellationToken_ = default);
     }
 
@@ -565,7 +1225,7 @@ namespace CapnpGen
             }
         }
 
-        public async Task<(bool, IReadOnlyList<uint>, ushort)> MoveSequential(IReadOnlyList<CapnpGen.Move> moves, CancellationToken cancellationToken_ = default)
+        public async Task<(bool, IReadOnlyList<CapnpGen.MoveResult>, ushort)> MoveSequential(IReadOnlyList<CapnpGen.Move> moves, CancellationToken cancellationToken_ = default)
         {
             var in_ = SerializerState.CreateForRpc<CapnpGen.Firehorse.Params_MoveSequential.WRITER>();
             var arg_ = new CapnpGen.Firehorse.Params_MoveSequential()
@@ -574,11 +1234,11 @@ namespace CapnpGen
             using (var d_ = await Call(12853609949317486689UL, 1, in_.Rewrap<DynamicSerializerState>(), false, cancellationToken_).WhenReturned)
             {
                 var r_ = CapnpSerializable.Create<CapnpGen.Firehorse.Result_MoveSequential>(d_);
-                return (r_.Success, r_.Captured, r_.FailedAt);
+                return (r_.Success, r_.Results, r_.FailedAt);
             }
         }
 
-        public async Task<(bool, IReadOnlyList<uint>, IReadOnlyList<ushort>)> MoveParallel(IReadOnlyList<CapnpGen.Move> moves, CancellationToken cancellationToken_ = default)
+        public async Task<(bool, IReadOnlyList<CapnpGen.MoveResult>, IReadOnlyList<ushort>)> MoveParallel(IReadOnlyList<CapnpGen.Move> moves, CancellationToken cancellationToken_ = default)
         {
             var in_ = SerializerState.CreateForRpc<CapnpGen.Firehorse.Params_MoveParallel.WRITER>();
             var arg_ = new CapnpGen.Firehorse.Params_MoveParallel()
@@ -587,7 +1247,7 @@ namespace CapnpGen
             using (var d_ = await Call(12853609949317486689UL, 2, in_.Rewrap<DynamicSerializerState>(), false, cancellationToken_).WhenReturned)
             {
                 var r_ = CapnpSerializable.Create<CapnpGen.Firehorse.Result_MoveParallel>(d_);
-                return (r_.Success, r_.Captured, r_.Failed);
+                return (r_.Success, r_.Results, r_.Failed);
             }
         }
 
@@ -630,10 +1290,10 @@ namespace CapnpGen
             using (d_)
             {
                 var in_ = CapnpSerializable.Create<CapnpGen.Firehorse.Params_MoveSequential>(d_);
-                return Impatient.MaybeTailCall(Impl.MoveSequential(in_.Moves, cancellationToken_), (success, captured, failedAt) =>
+                return Impatient.MaybeTailCall(Impl.MoveSequential(in_.Moves, cancellationToken_), (success, results, failedAt) =>
                 {
                     var s_ = SerializerState.CreateForRpc<CapnpGen.Firehorse.Result_MoveSequential.WRITER>();
-                    var r_ = new CapnpGen.Firehorse.Result_MoveSequential{Success = success, Captured = captured, FailedAt = failedAt};
+                    var r_ = new CapnpGen.Firehorse.Result_MoveSequential{Success = success, Results = results, FailedAt = failedAt};
                     r_.serialize(s_);
                     return s_;
                 }
@@ -647,10 +1307,10 @@ namespace CapnpGen
             using (d_)
             {
                 var in_ = CapnpSerializable.Create<CapnpGen.Firehorse.Params_MoveParallel>(d_);
-                return Impatient.MaybeTailCall(Impl.MoveParallel(in_.Moves, cancellationToken_), (success, captured, failed) =>
+                return Impatient.MaybeTailCall(Impl.MoveParallel(in_.Moves, cancellationToken_), (success, results, failed) =>
                 {
                     var s_ = SerializerState.CreateForRpc<CapnpGen.Firehorse.Result_MoveParallel.WRITER>();
-                    var r_ = new CapnpGen.Firehorse.Result_MoveParallel{Success = success, Captured = captured, Failed = failed};
+                    var r_ = new CapnpGen.Firehorse.Result_MoveParallel{Success = success, Results = results, Failed = failed};
                     r_.serialize(s_);
                     return s_;
                 }
@@ -846,7 +1506,7 @@ namespace CapnpGen
             {
                 var reader = READER.create(arg_);
                 Success = reader.Success;
-                Captured = reader.Captured;
+                Results = reader.Results?.ToReadOnlyList(_ => CapnpSerializable.Create<CapnpGen.MoveResult>(_));
                 FailedAt = reader.FailedAt;
                 applyDefaults();
             }
@@ -854,7 +1514,7 @@ namespace CapnpGen
             public void serialize(WRITER writer)
             {
                 writer.Success = Success;
-                writer.Captured.Init(Captured);
+                writer.Results.Init(Results, (_s1, _v1) => _v1?.serialize(_s1));
                 writer.FailedAt = FailedAt;
             }
 
@@ -873,7 +1533,7 @@ namespace CapnpGen
                 set;
             }
 
-            public IReadOnlyList<uint> Captured
+            public IReadOnlyList<CapnpGen.MoveResult> Results
             {
                 get;
                 set;
@@ -897,7 +1557,7 @@ namespace CapnpGen
                 public static implicit operator DeserializerState(READER reader) => reader.ctx;
                 public static implicit operator READER(DeserializerState ctx) => new READER(ctx);
                 public bool Success => ctx.ReadDataBool(0UL, false);
-                public IReadOnlyList<uint> Captured => ctx.ReadList(0).CastUInt();
+                public IReadOnlyList<CapnpGen.MoveResult.READER> Results => ctx.ReadList(0).Cast(CapnpGen.MoveResult.READER.create);
                 public ushort FailedAt => ctx.ReadDataUShort(16UL, (ushort)0);
             }
 
@@ -914,9 +1574,9 @@ namespace CapnpGen
                     set => this.WriteData(0UL, value, false);
                 }
 
-                public ListOfPrimitivesSerializer<uint> Captured
+                public ListOfStructsSerializer<CapnpGen.MoveResult.WRITER> Results
                 {
-                    get => BuildPointer<ListOfPrimitivesSerializer<uint>>(0);
+                    get => BuildPointer<ListOfStructsSerializer<CapnpGen.MoveResult.WRITER>>(0);
                     set => Link(0, value);
                 }
 
@@ -996,7 +1656,7 @@ namespace CapnpGen
             {
                 var reader = READER.create(arg_);
                 Success = reader.Success;
-                Captured = reader.Captured;
+                Results = reader.Results?.ToReadOnlyList(_ => CapnpSerializable.Create<CapnpGen.MoveResult>(_));
                 Failed = reader.Failed;
                 applyDefaults();
             }
@@ -1004,7 +1664,7 @@ namespace CapnpGen
             public void serialize(WRITER writer)
             {
                 writer.Success = Success;
-                writer.Captured.Init(Captured);
+                writer.Results.Init(Results, (_s1, _v1) => _v1?.serialize(_s1));
                 writer.Failed.Init(Failed);
             }
 
@@ -1023,7 +1683,7 @@ namespace CapnpGen
                 set;
             }
 
-            public IReadOnlyList<uint> Captured
+            public IReadOnlyList<CapnpGen.MoveResult> Results
             {
                 get;
                 set;
@@ -1047,7 +1707,7 @@ namespace CapnpGen
                 public static implicit operator DeserializerState(READER reader) => reader.ctx;
                 public static implicit operator READER(DeserializerState ctx) => new READER(ctx);
                 public bool Success => ctx.ReadDataBool(0UL, false);
-                public IReadOnlyList<uint> Captured => ctx.ReadList(0).CastUInt();
+                public IReadOnlyList<CapnpGen.MoveResult.READER> Results => ctx.ReadList(0).Cast(CapnpGen.MoveResult.READER.create);
                 public IReadOnlyList<ushort> Failed => ctx.ReadList(1).CastUShort();
             }
 
@@ -1064,9 +1724,9 @@ namespace CapnpGen
                     set => this.WriteData(0UL, value, false);
                 }
 
-                public ListOfPrimitivesSerializer<uint> Captured
+                public ListOfStructsSerializer<CapnpGen.MoveResult.WRITER> Results
                 {
-                    get => BuildPointer<ListOfPrimitivesSerializer<uint>>(0);
+                    get => BuildPointer<ListOfStructsSerializer<CapnpGen.MoveResult.WRITER>>(0);
                     set => Link(0, value);
                 }
 

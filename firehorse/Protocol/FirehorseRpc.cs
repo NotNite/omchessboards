@@ -1,17 +1,10 @@
 ﻿using CapnpGen;
 using Chess;
-using Firehorse.Chess;
-using MoveType = Chess.MoveType;
 
 namespace Firehorse.Protocol;
 
 // ReSharper disable AccessToDisposedClosure
-public class FirehorseRpc(
-    ChannelRelay<Snapshot> snapshotRelay,
-    ConstantScraperQueue<(uint, uint)> positionQueue,
-    AsyncScraperQueue<ClientMove, ServerValidMove> whiteMoveQueue,
-    AsyncScraperQueue<ClientMove, ServerValidMove> blackMoveQueue
-) : IFirehorse {
+public class FirehorseRpc(SharedChannels channels) : IFirehorse {
     public Task Listen(ICallback callback, CancellationToken cancellationToken = default) {
         // Separate task because we want it to outlive this function returning
         _ = Task.Run<Task>(async () => {
@@ -22,12 +15,26 @@ public class FirehorseRpc(
 
                 await Util.WrapTasks(
                     callbackCts,
-                    Task.Run(async () => {
-                        using var reader = snapshotRelay.CreateReader();
-                        await foreach (var data in reader.ReadAllAsync(linked.Token)) {
-                            await callback.OnSnapshot(data, linked.Token);
-                        }
-                    }, linked.Token)
+                    Util.PipeChannelIntoCallback(
+                        channels.SnapshotRelay,
+                        (data) => callback.OnSnapshot(data, linked.Token),
+                        linked.Token
+                    ),
+                    Util.PipeChannelIntoCallback(
+                        channels.MoveRelay,
+                        (data) => callback.OnPiecesMoved(data, linked.Token),
+                        linked.Token
+                    ),
+                    Util.PipeChannelIntoCallback(
+                        channels.CaptureRelay,
+                        (data) => callback.OnPiecesCaptured(data, linked.Token),
+                        linked.Token
+                    ),
+                    Util.PipeChannelIntoCallback(
+                        channels.AdoptRelay,
+                        (data) => callback.OnPiecesAdopted(data, linked.Token),
+                        linked.Token
+                    )
                 );
             } catch (Exception) {
                 // Console.WriteLine(e);
@@ -37,11 +44,12 @@ public class FirehorseRpc(
         return Task.CompletedTask;
     }
 
-    public async Task<(bool, IReadOnlyList<uint>, ushort)> MoveSequential(
+    public async Task<(bool, IReadOnlyList<MoveResult>, ushort)> MoveSequential(
         IReadOnlyList<Move> moves, CancellationToken cancellationToken = default
     ) {
-        var captured = new List<uint>();
+        var results = new List<MoveResult>();
 
+        // TODO: possible perf benefit here by sending the next move before the previous result is received
         for (var i = 0; i < moves.Count; i++) {
             try {
                 using var cts = new CancellationTokenSource();
@@ -50,23 +58,23 @@ public class FirehorseRpc(
 
                 var move = moves[i];
                 var gameMove = Util.ConvertMoveToGame(move);
-                var moveQueue = move.PieceIsWhite ? whiteMoveQueue : blackMoveQueue;
+                var moveQueue = move.PieceIsWhite ? channels.WhiteMoveQueue : channels.BlackMoveQueue;
 
                 var result = await moveQueue.SubmitAndWait(gameMove).WaitAsync(linked.Token);
-                if (result.CapturedPieceId != 0) captured.Add(result.CapturedPieceId);
+                results.Add(Util.ConvertMoveResultToFirehorse(result));
             } catch (Exception e) {
                 // This will throw for InvalidMoveException, but we also want other failures (e.g. unreliable net) to
                 // bail, since we won't know if the move went through or not
 
                 Console.WriteLine(e);
-                return (false, captured, (ushort) i);
+                return (false, results, (ushort) i);
             }
         }
 
-        return (true, captured, 0);
+        return (true, results, 0);
     }
 
-    public async Task<(bool, IReadOnlyList<uint>, IReadOnlyList<ushort>)> MoveParallel(
+    public async Task<(bool, IReadOnlyList<MoveResult>, IReadOnlyList<ushort>)> MoveParallel(
         IReadOnlyList<Move> moves, CancellationToken cancellationToken = default
     ) {
         var attempts = moves.Select((move) => {
@@ -76,13 +84,12 @@ public class FirehorseRpc(
                 cts.CancelAfter(TimeSpan.FromSeconds(1));
 
                 var gameMove = Util.ConvertMoveToGame(move);
-                var moveQueue = move.PieceIsWhite ? whiteMoveQueue : blackMoveQueue;
+                var moveQueue = move.PieceIsWhite ? channels.WhiteMoveQueue : channels.BlackMoveQueue;
 
-                var result = await moveQueue.SubmitAndWait(gameMove).WaitAsync(linked.Token);
-                return result.CapturedPieceId;
+                return await moveQueue.SubmitAndWait(gameMove).WaitAsync(linked.Token);
             }, cancellationToken);
 
-            return task.ContinueWith<uint?>(t => {
+            return task.ContinueWith<ServerValidMove?>(t => {
                 if (t.IsCompletedSuccessfully) {
                     return t.Result;
                 } else {
@@ -94,14 +101,16 @@ public class FirehorseRpc(
         var result = await Task.WhenAll(attempts);
 
         var success = result.All(x => x is not null);
-        var captured = result.Where(x => x > 0).Select(x => x!.Value).ToList();
+        var results = result
+                     .Select(r => r is not null ? Util.ConvertMoveResultToFirehorse(r) : new MoveResult())
+                     .ToList();
         var failed = result.Where(x => x is null).Select((_, i) => (ushort) i).ToList();
 
-        return (success, captured, failed);
+        return (success, results, failed);
     }
 
     public Task Queue(ushort x, ushort y, CancellationToken cancellationToken = default) {
-        positionQueue.Submit((x, y));
+        channels.PositionQueue.Submit((x, y));
         return Task.CompletedTask;
     }
 

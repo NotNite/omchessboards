@@ -1,5 +1,8 @@
-﻿using CapnpGen;
+﻿using System.Threading.Channels;
+using Capnp.Rpc;
+using CapnpGen;
 using Chess;
+using Firehorse.Protocol;
 using MoveType = Chess.MoveType;
 using PieceType = CapnpGen.PieceType;
 
@@ -17,32 +20,64 @@ public class Util {
         }).Unwrap();
     }));
 
-    public static Snapshot ConvertSnapshotToFirehorse(ServerStateSnapshot snapshot) {
-        return new Snapshot() {
-            X = (ushort) snapshot.XCoord,
-            Y = (ushort) snapshot.YCoord,
-            Pieces = snapshot.Pieces.Select(ConvertPieceToFirehorse).ToList()
-        };
+    public static async Task PipeChannelIntoCallback<T>(
+        ChannelRelay<T> relay,
+        Func<T, Task> submit,
+        CancellationToken cancellationToken = default
+    ) {
+        using var reader = relay.CreateReader();
+        await foreach (var data in reader.ReadAllAsync(cancellationToken)) {
+            try {
+                await submit(data);
+            } catch (RpcException) {
+                // ignored
+            }
+        }
     }
 
-    public static Piece ConvertPieceToFirehorse(PieceDataForSnapshot piece) {
-        return new Piece() {
-            Id = piece.Piece.Id,
-            Dx = (sbyte) piece.Dx,
-            Dy = (sbyte) piece.Dy,
-            Type = (PieceType) piece.Piece.Type,
-            IsWhite = piece.Piece.IsWhite
-        };
-    }
+    public static Snapshot ConvertSnapshotToFirehorse(ServerStateSnapshot snapshot) => new() {
+        X = (ushort) snapshot.XCoord,
+        Y = (ushort) snapshot.YCoord,
+        Pieces = snapshot.Pieces.Select(ConvertSnapshotPieceToFirehorse).ToList()
+    };
 
-    public static ClientMove ConvertMoveToGame(Move move) {
-        return new ClientMove() {
-            PieceId = move.Id,
-            FromX = move.FromX,
-            FromY = move.FromY,
-            ToX = move.ToX,
-            ToY = move.ToY,
-            MoveType = (MoveType) move.MoveType
-        };
-    }
+    public static SnapshotPiece ConvertSnapshotPieceToFirehorse(PieceDataForSnapshot piece) => new() {
+        Dx = (sbyte) piece.Dx,
+        Dy = (sbyte) piece.Dy,
+        Data = ConvertPieceToFirehorse(piece.Piece)
+    };
+
+    public static RemoteMove ConvertMovePieceToFirehorse(PieceDataForMove piece) => new() {
+        Seqnum = piece.Seqnum,
+        X = (ushort) piece.X,
+        Y = (ushort) piece.Y,
+        Data = ConvertPieceToFirehorse(piece.Piece)
+    };
+
+    public static PieceData ConvertPieceToFirehorse(PieceDataShared piece) => new() {
+        Id = piece.Id,
+        Type = (PieceType) piece.Type,
+        IsWhite = piece.IsWhite,
+        MoveCount = piece.MoveCount,
+        CaptureCount = piece.CaptureCount
+    };
+
+    public static ClientMove ConvertMoveToGame(Move move) => new() {
+        PieceId = move.Id,
+        FromX = move.FromX,
+        FromY = move.FromY,
+        ToX = move.ToX,
+        ToY = move.ToY,
+        MoveType = (MoveType) move.MoveType
+    };
+
+    public static MoveResult ConvertMoveResultToFirehorse(ServerValidMove move) => new() {
+        Seqnum = move.AsOfSeqnum,
+        CapturedPieceId = move.CapturedPieceId
+    };
+
+    public static MoveResult ConvertPieceCaptureToFirehorse(PieceCapture capture) => new() {
+        Seqnum = capture.Seqnum,
+        CapturedPieceId = capture.CapturedPieceId
+    };
 }
