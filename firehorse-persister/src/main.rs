@@ -16,7 +16,7 @@ use redis::Commands;
 use std::{
     collections::HashMap,
     hash::Hash,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tokio::net::TcpStream;
 use tokio_util::compat::{
@@ -237,6 +237,8 @@ async fn poll(
     // try to load all the seen pieces from redis
     let mut redis_con = redis.get()?;
 
+    println!("Starting load of all seen pieces");
+
     let x_keys: Vec<String> = redis_con.scan_match("chess:seen:*").unwrap().collect();
 
     x_keys.par_iter().for_each(|x_hash_key| {
@@ -263,8 +265,15 @@ async fn poll(
             seen_pieces.insert(Position(x_key, y_key), piece_id);
         }
     });
+    println!("Loaded {} seen pieces", seen_pieces.len());
 
     while let Ok((pos, action)) = rx.recv_async().await {
+        // HACK(erin): sleep more if there's only 1 item in the channel as a last ditch saving measure
+        if rx.len() == 1 {
+            println!("BREAKGLASS: sleeping for 1000ms");
+            async_std::task::sleep(Duration::from_millis(1000)).await;
+        }
+
         let mut piece_ids: Vec<i64> = vec![/* ... */];
         let mut piece_type: Vec<i64> = vec![/* ... */];
         let mut is_white: Vec<bool> = vec![/*... */];
@@ -309,6 +318,14 @@ async fn poll(
                     piece.id,
                 )
                 .ignore();
+        }
+
+        // ignore empty piece_id sets
+        if piece_ids.is_empty() {
+            println!("No pieces were inserted, remaining {}!", rx.len());
+            // HACK(erin@): sleeping seems to buy more time before the socket dies. this needs to be looked into :(
+            async_std::task::sleep(Duration::from_millis(100)).await;
+            continue;
         }
 
         // update sql first
