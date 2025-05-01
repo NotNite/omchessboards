@@ -1,7 +1,6 @@
 use async_compression::tokio::{bufread::ZstdDecoder, write::ZstdEncoder};
 use capnp::capability::Promise;
 use capnp_rpc::{RpcSystem, rpc_twoparty_capnp::Side, twoparty::VatNetwork};
-use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use dashmap::DashMap;
 use firehorse_capnp::PieceType;
 use flume::{Receiver, Sender};
@@ -10,7 +9,6 @@ use futures::{
     io::{BufReader, BufWriter},
     try_join,
 };
-use image::RgbImage;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use redis::Commands;
 use std::{
@@ -296,7 +294,11 @@ async fn poll(
             &pos_x[..],
             &pos_y[..],
         ).execute(&db).await?;
-        println!("inserted {} pieces", piece_ids.len());
+        println!(
+            "inserted {} pieces, remaining chunks {}",
+            piece_ids.len(),
+            rx.len()
+        );
 
         // update redis next
         // TODO: how the heck do i actually do this properly :(
