@@ -10,7 +10,11 @@ use futures::{
     try_join,
 };
 use image::RgbImage;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    collections::HashMap,
+    hash::Hash,
+    time::{SystemTime, UNIX_EPOCH},
+};
 use tokio::net::TcpStream;
 use tokio_util::compat::{
     FuturesAsyncReadCompatExt, FuturesAsyncWriteCompatExt, TokioAsyncReadCompatExt,
@@ -29,7 +33,7 @@ pub mod firehorse_capnp {
     include!(concat!(env!("OUT_DIR"), "/firehorse_capnp.rs"));
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Hash, Clone, Copy)]
 struct Position(u16, u16);
 
 struct SerializedPiece {
@@ -223,12 +227,9 @@ fn create_positions() -> Vec<Position> {
 async fn poll(
     rx: Receiver<(Position, SerializedAuditAction)>,
     db: Pool<Postgres>,
+    redis: redis::Client,
 ) -> eyre::Result<()> {
-    let mut positions = create_positions();
-
-    let start = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("time went backwards");
+    let mut seen_pieces: HashMap<Position, u32> = HashMap::new();
 
     while let Ok((pos, action)) = rx.recv_async().await {
         let mut piece_ids: Vec<i64> = vec![/* ... */];
@@ -240,6 +241,24 @@ async fn poll(
         let mut pos_y: Vec<i64> = vec![/*... */];
 
         for piece in action.pieces {
+            // check if we've seen the x/y before
+            match seen_pieces.get_mut(&piece.position) {
+                Some(seen_id) => {
+                    // Ignore the piece if we've seen it before
+                    if piece.id == *seen_id {
+                        continue;
+                    }
+
+                    // Update the piece in the seen pieces if not
+                    *seen_id = piece.id;
+                }
+                None => {
+                    // Add the piece to the seen pieces
+                    seen_pieces.insert(piece.position, piece.id);
+                }
+            }
+
+            // insert the piece if we haven't
             piece_ids.push(piece.id as i64);
             piece_type.push(piece.r#type as i64);
             is_white.push(piece.is_white);
@@ -277,6 +296,8 @@ async fn main() -> eyre::Result<()> {
         .connect(&db_dsn)
         .await?;
 
+    let redis_client = redis::Client::open("redis://127.0.0.1/").unwrap();
+
     let stream = TcpStream::connect("127.0.0.1:42069").await?;
     println!("connected");
 
@@ -311,83 +332,10 @@ async fn main() -> eyre::Result<()> {
     listen.get().set_callback(callback_client);
 
     try_join!(
-        poll(rx, db),
+        poll(rx, db, redis_client),
         system.map_err(|e| e.into()),
         listen.send().promise.map_err(|e| e.into()),
     )?;
 
     Ok(())
 }
-
-/*let mut move_sequential = client.move_sequential_request();
-let mut move_sequential_moves = move_sequential.get().init_moves(4);
-for i in 0..move_sequential_moves.len() {
-    let mut r#move = move_sequential_moves.reborrow().get(i as u32);
-
-    let id = 14634993;
-    let x = 3656;
-    let y = 2745;
-
-    r#move.set_id(id);
-    r#move.set_move_type(firehorse_capnp::MoveType::Normal);
-    r#move.set_piece_is_white(false);
-
-    r#move.set_from_x(x);
-    r#move.set_to_x(x);
-
-    r#move.set_from_y(y + i as u16);
-    r#move.set_to_y(y + i as u16 + 1);
-}
-
-let mut move_parallel = client.move_parallel_request();
-let mut move_parallel_moves = move_parallel.get().init_moves(8);
-for i in 0..move_parallel_moves.len() {
-    let mut r#move = move_parallel_moves.reborrow().get(i as u32);
-
-    let id = 14602993 + i;
-    let x = 3648 + i as u16;
-    let y = 2745;
-
-    r#move.set_id(id);
-    r#move.set_move_type(firehorse_capnp::MoveType::Normal);
-    r#move.set_piece_is_white(false);
-
-    r#move.set_from_x(x);
-    r#move.set_to_x(x);
-
-    r#move.set_from_y(y);
-    r#move.set_to_y(y + 1);
-}*/
-
-/*move_sequential
-    .send()
-    .promise
-    .map_ok(|d| {
-        if let Ok(d) = d.get() {
-            if d.get_success() {
-                println!("move_sequential success!");
-            } else {
-                println!("move_sequential failed at {} :(", d.get_failed_at());
-            }
-        }
-    })
-    .map_err(|e| e.into()),
-move_parallel
-    .send()
-    .promise
-    .map_ok(|d| {
-        if let Ok(d) = d.get() {
-            if d.get_success() {
-                println!("move_parallel success!");
-            } else {
-                let failed = if let Ok(failed) = d.get_failed() {
-                    failed.iter().map(|i| i).collect::<Vec<_>>()
-                } else {
-                    Vec::new()
-                };
-
-                println!("move_parallel failed {:?} :(", failed);
-            }
-        }
-    })
-    .map_err(|e| e.into()),*/
