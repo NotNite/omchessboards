@@ -10,8 +10,9 @@ public static class Program {
     public const int BoardsPerAxis = 1000;
     public const int MapSize = BoardsPerAxis * BoardSize;
 
-    public const int SubscriptionSize = 96;
+    public const int SubscriptionSize = 94;
     public const int HalfSubscriptionSize = SubscriptionSize / 2;
+    public const int MaxSubscription = MapSize - 1;
 
     public static async Task Main() {
         var cts = new CancellationTokenSource();
@@ -82,8 +83,8 @@ public static class Program {
                             Task.Run(() => scraper.RunSnapshotsAsync(linked.Token), linked.Token),
                             Task.Run(() => scraper.RunMovesAsync(linked.Token), linked.Token)
                         );
-                    } catch (Exception e) {
-                        Console.WriteLine(e);
+                    } catch (Exception) {
+                        // Console.WriteLine(e);
                     }
                 }
             }, cts.Token));

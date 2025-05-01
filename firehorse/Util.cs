@@ -3,6 +3,7 @@ using Capnp.Rpc;
 using CapnpGen;
 using Chess;
 using Firehorse.Protocol;
+using Exception = System.Exception;
 using MoveType = Chess.MoveType;
 using PieceType = CapnpGen.PieceType;
 
@@ -80,4 +81,34 @@ public class Util {
         Seqnum = capture.Seqnum,
         CapturedPieceId = capture.CapturedPieceId
     };
+
+    public static List<(ushort, ushort)> CreatePositions() {
+        const int duplicate = 3; // add the work a few times to prevent constant refills
+
+        var result = new List<(ushort, ushort)>();
+
+        for (var i = 0; i < duplicate; i++) {
+            foreach (var y in CreateAxisPositions()) {
+                foreach (var x in CreateAxisPositions()) {
+                    result.Add((x, y));
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private static List<ushort> CreateAxisPositions() {
+        var result = new List<ushort>();
+
+        ushort i;
+        for (i = Program.HalfSubscriptionSize; i < Program.MapSize; i += Program.SubscriptionSize) {
+            result.Add(i);
+        }
+
+        // Very edge of the board won't be covered without this!
+        result.Add(Program.MaxSubscription);
+
+        return result;
+    }
 }

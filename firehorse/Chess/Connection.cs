@@ -224,7 +224,7 @@ public class Connection : IDisposable {
     }
 
     public async Task<ServerStateSnapshot> GetSnapshotAsync(
-        uint x, uint y, CancellationToken cancellationToken = default
+        ushort x, ushort y, CancellationToken cancellationToken = default
     ) {
         using var cts = new CancellationTokenSource();
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, cts.Token);

@@ -1,12 +1,14 @@
 use async_compression::tokio::{bufread::ZstdDecoder, write::ZstdEncoder};
 use capnp::capability::Promise;
 use capnp_rpc::{RpcSystem, rpc_twoparty_capnp::Side, twoparty::VatNetwork};
+use firehorse_capnp::PieceType;
 use flume::{Receiver, Sender};
 use futures::{
     AsyncReadExt, TryFutureExt,
     io::{BufReader, BufWriter},
     try_join,
 };
+use image::RgbImage;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::net::TcpStream;
 use tokio_util::compat::{
@@ -18,13 +20,22 @@ pub mod firehorse_capnp {
     include!(concat!(env!("OUT_DIR"), "/firehorse_capnp.rs"));
 }
 
+#[derive(PartialEq, Eq, Debug)]
+struct Position(u16, u16);
+
+struct SerializedPiece {
+    position: Position,
+    r#type: PieceType,
+    is_white: bool,
+}
+
 #[derive(Clone)]
-pub struct Callback {
-    tx: Sender<(u16, u16)>,
+struct Callback {
+    tx: Sender<(Position, Vec<SerializedPiece>)>,
 }
 
 impl Callback {
-    pub fn new(tx: Sender<(u16, u16)>) -> Self {
+    pub fn new(tx: Sender<(Position, Vec<SerializedPiece>)>) -> Self {
         Callback { tx }
     }
 }
@@ -43,7 +54,22 @@ impl Callback {
         params: firehorse_capnp::callback::OnSnapshotParams,
     ) -> eyre::Result<()> {
         let snapshot = params.get()?.get_snapshot()?;
-        self.tx.send((snapshot.get_x(), snapshot.get_y()))?;
+        let position = Position(snapshot.get_x(), snapshot.get_y());
+
+        let mut pieces = Vec::new();
+        for piece in snapshot.get_pieces()? {
+            let data = piece.get_data()?;
+            let x = position.0 as i16 + piece.get_dx() as i16;
+            let y = position.1 as i16 + piece.get_dy() as i16;
+
+            pieces.push(SerializedPiece {
+                position: Position(x as u16, y as u16),
+                r#type: data.get_type()?,
+                is_white: data.get_is_white(),
+            });
+        }
+
+        self.tx.send((position, pieces))?;
         Ok(())
     }
 
@@ -118,29 +144,84 @@ impl firehorse_capnp::callback::Server for Callback {
     }
 }
 
-async fn poll(rx: Receiver<(u16, u16)>) -> eyre::Result<()> {
-    const BOARD_SIZE: usize = 8;
-    const BOARDS_PER_AXIS: usize = 1000;
-    const MAP_SIZE: usize = BOARDS_PER_AXIS * BOARD_SIZE;
+fn create_axis() -> Vec<u16> {
+    // basically exactly matches the logic in Util.cs
+    let mut result = Vec::new();
 
-    const SUBSCRIPTION_SIZE: usize = 96;
-    const HALF_SUBSCRIPTION_SIZE: usize = SUBSCRIPTION_SIZE / 2;
-    const END: usize = MAP_SIZE - HALF_SUBSCRIPTION_SIZE;
+    const BOARD_SIZE: u16 = 8;
+    const BOARDS_PER_AXIS: u16 = 1000;
+    const MAP_SIZE: u16 = BOARDS_PER_AXIS * BOARD_SIZE;
 
-    let mut positions = Vec::new();
+    const SUBSCRIPTION_SIZE: u16 = 94;
+    const HALF_SUBSCRIPTION_SIZE: u16 = SUBSCRIPTION_SIZE / 2;
+    const MAX_SUBSCRIPTION: u16 = MAP_SIZE - 1;
 
-    for y in (HALF_SUBSCRIPTION_SIZE..END).step_by(SUBSCRIPTION_SIZE) {
-        for x in (HALF_SUBSCRIPTION_SIZE..END).step_by(SUBSCRIPTION_SIZE) {
-            positions.push((x as u16, y as u16));
+    let mut i = HALF_SUBSCRIPTION_SIZE;
+    while i < MAP_SIZE {
+        result.push(i);
+        i += SUBSCRIPTION_SIZE;
+    }
+
+    result.push(MAX_SUBSCRIPTION);
+
+    result
+}
+
+fn create_positions() -> Vec<Position> {
+    let mut result = Vec::new();
+
+    for y in create_axis() {
+        for x in create_axis() {
+            result.push(Position(x, y));
         }
     }
+
+    result
+}
+
+async fn poll(rx: Receiver<(Position, Vec<SerializedPiece>)>) -> eyre::Result<()> {
+    let mut white = RgbImage::new(8000, 8000);
+    let mut black = RgbImage::new(8000, 8000);
+
+    for pixel in white.pixels_mut().chain(black.pixels_mut()) {
+        // color picked from the site
+        pixel.0[0] = 61;
+        pixel.0[1] = 75;
+        pixel.0[2] = 95;
+    }
+
+    let mut positions = create_positions();
 
     let start = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("time went backwards");
 
-    while let Ok((x, y)) = rx.recv_async().await {
-        if let Some(idx) = positions.iter().position(|p| p.0 == x && p.1 == y) {
+    while let Ok((pos, pieces)) = rx.recv_async().await {
+        for piece in pieces {
+            let image = if piece.is_white {
+                &mut white
+            } else {
+                &mut black
+            };
+
+            // colors chosen at complete random
+            let color = match piece.r#type {
+                PieceType::Pawn => (0, 0, 0),
+                PieceType::Knight => (255, 0, 0),
+                PieceType::Bishop => (0, 255, 0),
+                PieceType::Rook => (0, 0, 255),
+                PieceType::Queen => (255, 0, 255),
+                PieceType::King => (255, 255, 255),
+                PieceType::PromotedPawn => (255, 255, 0),
+            };
+
+            let pixel = image.get_pixel_mut(piece.position.0 as u32, piece.position.1 as u32);
+            pixel.0[0] = color.0;
+            pixel.0[1] = color.1;
+            pixel.0[2] = color.2;
+        }
+
+        if let Some(idx) = positions.iter().position(|p| *p == pos) {
             positions.remove(idx);
 
             let size = positions.len();
@@ -151,6 +232,9 @@ async fn poll(rx: Receiver<(u16, u16)>) -> eyre::Result<()> {
 
                 let elapsed = now - start;
                 println!("indexed board in {}", elapsed.as_secs_f32());
+
+                white.save("white.png")?;
+                black.save("black.png")?;
             }
 
             if size % 100 == 0 {
