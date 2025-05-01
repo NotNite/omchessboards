@@ -28,11 +28,7 @@ public class Util {
     ) {
         using var reader = relay.CreateReader();
         await foreach (var data in reader.ReadAllAsync(cancellationToken)) {
-            try {
-                await submit(data);
-            } catch (RpcException) {
-                // ignored
-            }
+            await submit(data);
         }
     }
 

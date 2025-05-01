@@ -30,13 +30,19 @@ public class DisposableReader<T> : IDisposable {
     private readonly List<ChannelWriter<T>> writers;
 
     public DisposableReader(List<ChannelWriter<T>> writers) {
-        this.channel = Channel.CreateUnbounded<T>();
+        this.channel = Channel.CreateBounded<T>(new BoundedChannelOptions(100) {
+            FullMode = BoundedChannelFullMode.DropWrite
+        }, this.OnItemDropped);
         this.writers = writers;
         lock (this.writers) this.writers.Add(this.channel.Writer);
     }
 
     public IAsyncEnumerable<T> ReadAllAsync(CancellationToken cancellationToken = default) {
         return this.channel.Reader.ReadAllAsync(cancellationToken);
+    }
+
+    private void OnItemDropped(T data) {
+        // Console.WriteLine($"dropped {DateTime.UtcNow} {data}");
     }
 
     public void Dispose() {
